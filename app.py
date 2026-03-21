@@ -1,7 +1,4 @@
 import streamlit as st
-import requests
-import json
-import os
 import time
 from datetime import date, datetime, timedelta
 import plotly.graph_objects as go
@@ -10,194 +7,24 @@ from epic_auth import (
     stats_for_window, fetch_stats_epic, parse_raw_stats,
 )
 
+from config import DEFAULT_FORTNITE_PLAYERS, DEFAULT_OW2_PLAYERS, CSS
+from api import (
+    fetch_fortnite_stats, epic_parsed_to_mode_stats, fetch_epic_account_ids,
+    search_ow2_player, fetch_ow2_stats,
+)
+from metrics import (
+    SCORE_CURVES, PERCENTILE_CURVES, value_to_percentile, pct_color,
+    perf_score, score_color, score_circle_html, _interp,
+)
+from helpers import get_fortnite_api_key, load_squad, save_squad
+
 st.set_page_config(page_title="Squad Tracker", page_icon="🎮", layout="wide")
 
-SAVE_FILE = os.path.join(os.path.dirname(__file__), "squad.json")
-FORTNITE_API = "https://fortnite-api.com/v2/stats/br/v2"
-OW2_API = "https://overfast-api.tekrop.fr"
-
 # ── CSS ──────────────────────────────────────────────────────────────────────
-st.markdown("""
-<style>
-    .battle-card {
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-        border-radius: 16px;
-        padding: 20px;
-        margin: 8px 0;
-        border: 2px solid #e94560;
-        color: white;
-        position: relative;
-        overflow: hidden;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-    }
-    .battle-card.ow2 {
-        border-color: #f99e1a;
-    }
-    .battle-card.ow2 .player-name,
-    .battle-card.ow2 .stat-highlight,
-    .battle-card.ow2 .mode-title {
-        color: #f99e1a;
-    }
-    .battle-card.ow2 .rank-badge {
-        background: #f99e1a;
-    }
-    .battle-card::before {
-        content: '';
-        position: absolute;
-        top: -50%;
-        left: -50%;
-        width: 200%;
-        height: 200%;
-        background: radial-gradient(circle, rgba(233,69,96,0.1) 0%, transparent 70%);
-        pointer-events: none;
-    }
-    .player-name {
-        font-size: 1.1em;
-        font-weight: 800;
-        margin-bottom: 4px;
-        color: #e94560;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        word-break: break-word;
-    }
-    .player-platform {
-        font-size: 0.8em;
-        color: #a8a8b3;
-        margin-bottom: 16px;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    .stat-row {
-        display: flex;
-        justify-content: space-between;
-        padding: 6px 0;
-        border-bottom: 1px solid rgba(255,255,255,0.08);
-    }
-    .stat-label {
-        color: #a8a8b3;
-        font-size: 0.85em;
-    }
-    .stat-value {
-        color: white;
-        font-weight: 700;
-        font-size: 0.95em;
-    }
-    .stat-highlight {
-        color: #e94560;
-        font-weight: 700;
-        font-size: 0.95em;
-    }
-    .big-stat {
-        text-align: center;
-        padding: 8px;
-    }
-    .big-stat-value {
-        font-size: 1.8em;
-        font-weight: 800;
-        color: white;
-    }
-    .big-stat-label {
-        font-size: 0.7em;
-        color: #a8a8b3;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    .rank-badge {
-        display: inline-block;
-        background: #e94560;
-        color: white;
-        padding: 2px 10px;
-        border-radius: 12px;
-        font-size: 0.75em;
-        font-weight: 700;
-        margin-left: 8px;
-    }
-    .mode-tab {
-        background: rgba(255,255,255,0.05);
-        border-radius: 8px;
-        padding: 12px;
-        margin-top: 12px;
-    }
-    .mode-title {
-        font-size: 0.85em;
-        color: #e94560;
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        margin-bottom: 8px;
-    }
-    .rank-icon {
-        width: 40px;
-        height: 40px;
-        vertical-align: middle;
-        margin-right: 6px;
-    }
-    .player-avatar {
-        width: 64px;
-        height: 64px;
-        border-radius: 50%;
-        border: 2px solid #f99e1a;
-        margin-bottom: 8px;
-    }
-</style>
-""", unsafe_allow_html=True)
+st.markdown(CSS, unsafe_allow_html=True)
 
 
 # ── State / Persistence ─────────────────────────────────────────────────────
-def get_fortnite_api_key():
-    """Get API key from secrets (preferred) or session state fallback."""
-    try:
-        key = st.secrets["FORTNITE_API_KEY"]
-        if key:
-            return key
-    except Exception:
-        pass
-    return st.session_state.get("fn_api_key_input", "")
-
-
-DEFAULT_FORTNITE_PLAYERS = [
-    {"name": "astros44", "type": "xbl", "platform": "Xbox"},
-    {"name": "zippomanjingles", "type": "psn", "platform": "PlayStation"},
-    {"name": "crazy in basye", "type": "xbl", "platform": "Xbox"},
-    {"name": "i7vosunz458", "type": "xbl", "platform": "Xbox"},
-    {"name": "callmepot", "type": "epic", "platform": "Epic (PC)"},
-    {"name": "Jbone", "type": "epic", "platform": "Epic (PC)"},
-    {"name": "hailedcanvas141", "type": "xbl", "platform": "Xbox"},
-    {"name": "mrfox733", "type": "xbl", "platform": "Xbox"},
-]
-
-DEFAULT_OW2_PLAYERS = [
-    {"name": "bigdumpy", "player_id": "f057ab8ea67c8bb4a4a126a7d603%7C4e6a5ab09612cbe141cc5cca93318eab"},
-    {"name": "meowforheals", "player_id": "ff5ba39db57e89a5ecf17be3c903a40a4a%7C675748059c6913c6fafb628a567232f0"},
-    {"name": "classic", "player_id": "f152ad99a07898e0baa120a7d4%7C156e54723040e35b417b08d93b151741"},
-    {"name": "Batzz", "player_id": "d05fb890a93cc9f9bea1%7Cee7e46b8d5cd02a21bd084bd5004fdbe"},
-    {"name": "GasCan", "player_id": "d55fbfa9b27fd6fcb8a220a4%7C60d238a9723f0c5c425ab4c56d4579b8"},
-    {"name": "GreyBeast", "player_id": "d54ca99391749abefdbd25a7d607a5%7C2b7fa8e1b80a57998ee25a9d17f99925"},
-    {"name": "Jbone", "player_id": "d85ca384b63ccafcbda92e%7C508837fd0c53ce752effa237b8d205a8"},
-    {"name": "Paulpummeler"},
-    {"name": "i7vosunz458"},
-]
-
-
-def load_squad():
-    if os.path.exists(SAVE_FILE):
-        with open(SAVE_FILE) as f:
-            data = json.load(f)
-            data.pop("fortnite_api_key", None)
-            data.pop("api_key", None)
-            return data
-    return {
-        "fortnite_players": list(DEFAULT_FORTNITE_PLAYERS),
-        "ow2_players": list(DEFAULT_OW2_PLAYERS),
-    }
-
-
-def save_squad(data):
-    with open(SAVE_FILE, "w") as f:
-        json.dump(data, f, indent=2)
-
-
 if "squad" not in st.session_state:
     st.session_state.squad = load_squad()
     if "players" in st.session_state.squad:
@@ -216,156 +43,6 @@ if "fn_cache" not in st.session_state:
     st.session_state.fn_cache = {}
 if "ow2_cache" not in st.session_state:
     st.session_state.ow2_cache = {}
-
-
-# ── Fortnite API ─────────────────────────────────────────────────────────────
-def fetch_fortnite_stats(name, account_type, api_key):
-    """Fetch both lifetime and season stats."""
-    result = {}
-    for window in ["lifetime", "season"]:
-        resp = requests.get(
-            FORTNITE_API,
-            headers={"Authorization": api_key},
-            params={"name": name, "accountType": account_type, "timeWindow": window},
-            timeout=15,
-        )
-        data = resp.json()
-        if data["status"] == 200:
-            result[window] = data["data"]
-        time.sleep(0.5)
-    if result.get("lifetime"):
-        # Merge: primary data is lifetime, attach season as extra key
-        merged = result["lifetime"]
-        if result.get("season"):
-            merged["season_stats"] = result["season"].get("stats", {})
-        return merged
-    return None
-
-
-def epic_parsed_to_mode_stats(parsed):
-    """Convert Epic raw parsed stats into fortnite-api.com-style mode stats.
-
-    Groups playlists into solo/duo/squad/overall and sums across inputs.
-    Returns dict like: {"all": {"overall": {...}, "solo": {...}, ...}}
-    """
-    mode_map = {
-        "solo": ["defaultsolo", "nobuildbrsolo", "nobuildbr_solo", "figmentsolo",
-                 "figmentnobuildsolo"],
-        "duo": ["defaultduo", "nobuildbrduos", "nobuildbr_duo", "figmentduo",
-                "figmentnobuildduo", "bots_nobuildbr_duo"],
-        "squad": ["defaultsquad", "nobuildbrsquad", "nobuildbr_squad", "sunflowernobuildsquad",
-                  "arseniccore_squads_maxfog", "punchberrynobuildsquad",
-                  "mash_squads_legacy", "forbiddenfruitnobuildbrsquad"],
-        "trio": ["trios", "nobuildbr_trio", "bots_nobuildbr_trio"],
-    }
-
-    totals = {}  # mode -> {metric: value}
-    for mode in ["solo", "duo", "trio", "squad", "overall"]:
-        totals[mode] = {}
-
-    for input_type, playlists in parsed.items():
-        for playlist, metrics in playlists.items():
-            # Determine which mode this playlist belongs to
-            assigned = "overall"  # everything counts toward overall
-            for mode, keywords in mode_map.items():
-                if any(kw in playlist for kw in keywords):
-                    assigned = mode
-                    break
-
-            # Add to the assigned mode AND overall
-            for target in ([assigned, "overall"] if assigned != "overall" else ["overall"]):
-                for metric, val in metrics.items():
-                    if metric == "lastmodified":
-                        continue
-                    totals[target][metric] = totals[target].get(metric, 0) + val
-
-    # Convert to fortnite-api.com format
-    result = {"all": {}}
-    for mode, raw in totals.items():
-        matches = raw.get("matchesplayed", 0)
-        kills = raw.get("kills", 0)
-        wins = raw.get("placetop1", 0)
-        deaths = max(matches - wins, 0)
-        result["all"][mode] = {
-            "score": raw.get("score", 0),
-            "scorePerMin": raw.get("score", 0) / max(raw.get("minutesplayed", 1), 1),
-            "scorePerMatch": raw.get("score", 0) / max(matches, 1),
-            "wins": wins,
-            "top3": raw.get("placetop3", 0),
-            "top5": raw.get("placetop5", 0),
-            "top6": raw.get("placetop6", 0),
-            "top10": raw.get("placetop10", 0),
-            "top12": raw.get("placetop12", 0),
-            "top25": raw.get("placetop25", 0),
-            "kills": kills,
-            "killsPerMin": kills / max(raw.get("minutesplayed", 1), 1),
-            "killsPerMatch": kills / max(matches, 1),
-            "deaths": deaths,
-            "kd": kills / max(deaths, 1),
-            "matches": matches,
-            "winRate": wins / max(matches, 1) * 100,
-            "minutesPlayed": raw.get("minutesplayed", 0),
-            "playersOutlived": raw.get("playersoutlived", 0),
-        }
-    return result
-
-
-def fetch_epic_account_ids(fn_players):
-    """Look up Epic account IDs for all players. Returns {name: account_id}."""
-    token = get_valid_token()
-    if not token:
-        return {}
-    ids = {}
-    for p in fn_players:
-        # Use Epic display name from fortnite-api data if available
-        display = p.get("epic_name") or p["name"]
-        result = lookup_account_by_name(display, token)
-        if result:
-            ids[p["name"]] = result["id"]
-        time.sleep(0.2)
-    return ids
-
-
-# ── OW2 API ──────────────────────────────────────────────────────────────────
-def search_ow2_player(name):
-    """Search for an OW2 player by name, trying multiple case variants."""
-    variants = list(dict.fromkeys([name, name.title(), name.capitalize(), name.lower(), name.upper()]))
-    for variant in variants:
-        try:
-            resp = requests.get(f"{OW2_API}/players", params={"name": variant}, timeout=30)
-            data = resp.json()
-            results = data.get("results", [])
-            public = [r for r in results if r.get("is_public")]
-            if public:
-                return public[0]
-            if results:
-                return results[0]
-        except Exception:
-            pass
-        time.sleep(1)
-    return None
-
-
-def fetch_ow2_stats(player_id):
-    """Fetch summary and stats for an OW2 player."""
-    result = {}
-    try:
-        resp = requests.get(f"{OW2_API}/players/{player_id}/summary", timeout=30)
-        if resp.status_code == 200:
-            result["summary"] = resp.json()
-    except Exception:
-        pass
-
-    time.sleep(1)
-
-    try:
-        resp = requests.get(f"{OW2_API}/players/{player_id}/stats/summary", timeout=30)
-        if resp.status_code == 200:
-            result["stats"] = resp.json()
-    except Exception:
-        pass
-
-    return result if result else None
 
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
@@ -629,7 +306,6 @@ with fn_tab:
                             parsed_raw = fetch_stats_epic(aid, start_ts, end_ts)
                             cache_key = f"epic_{aid}_{range_key}"
                             if parsed_raw:
-                                from epic_auth import parse_raw_stats
                                 st.session_state.epic_cache[cache_key] = epic_parsed_to_mode_stats(parse_raw_stats(parsed_raw))
                             else:
                                 st.session_state.epic_cache[cache_key] = None
@@ -652,74 +328,6 @@ with fn_tab:
             best_wr = max((player_mode(n).get("winRate", 0) or 0) for n in names)
             best_kills = max((player_mode(n).get("kills", 0) or 0) for n in names)
             best_kpm = max((player_mode(n).get("killsPerMatch", 0) or 0) for n in names)
-
-            # Performance Score: composite 0-100 from K/D, Win Rate, Kills/Match percentiles
-            SCORE_CURVES = {
-                "kd": [
-                    (0, 0), (0.5, 15), (0.8, 30), (1.0, 50), (1.3, 65),
-                    (1.5, 72), (2.0, 85), (2.5, 90), (3.0, 95), (4.0, 98), (6.0, 100),
-                ],
-                "winRate": [
-                    (0, 0), (1, 15), (2, 25), (3, 35), (5, 50), (7, 60),
-                    (10, 72), (15, 82), (20, 90), (30, 95), (50, 99), (100, 100),
-                ],
-                "killsPerMatch": [
-                    (0, 0), (0.5, 15), (1.0, 30), (1.5, 45), (2.0, 58),
-                    (2.5, 68), (3.0, 78), (4.0, 88), (5.0, 93), (7.0, 98), (10.0, 100),
-                ],
-            }
-
-            def _interp(value, curve):
-                if value <= curve[0][0]:
-                    return curve[0][1]
-                if value >= curve[-1][0]:
-                    return curve[-1][1]
-                for i in range(len(curve) - 1):
-                    v0, p0 = curve[i]
-                    v1, p1 = curve[i + 1]
-                    if v0 <= value <= v1:
-                        t = (value - v0) / (v1 - v0)
-                        return p0 + t * (p1 - p0)
-                return 50
-
-            def perf_score(stats_dict):
-                """Weighted composite: 40% K/D + 30% Win Rate + 30% Kills/Match."""
-                if not stats_dict:
-                    return None
-                o = stats_dict.get("all", {}).get("overall", {})
-                if not o or not o.get("matches", 0):
-                    return None
-                kd_pct = _interp(o.get("kd", 0) or 0, SCORE_CURVES["kd"])
-                wr_pct = _interp(o.get("winRate", 0) or 0, SCORE_CURVES["winRate"])
-                kpm_pct = _interp(o.get("killsPerMatch", 0) or 0, SCORE_CURVES["killsPerMatch"])
-                return round(0.4 * kd_pct + 0.3 * wr_pct + 0.3 * kpm_pct)
-
-            def score_color(s):
-                if s is None:
-                    return "#444"
-                if s >= 75:
-                    return "#00c853"  # green
-                if s >= 50:
-                    return "#ffc107"  # yellow
-                return "#ef5350"  # red
-
-            def score_circle_html(score, label):
-                """CSS donut circle like WHOOP recovery scores."""
-                if score is None:
-                    score_text = "--"
-                    deg = 0
-                else:
-                    score_text = str(score)
-                    deg = round(score * 3.6)
-                color = score_color(score)
-                return f'''<div style="display:flex;flex-direction:column;align-items:center;">
-                    <div style="width:72px;height:72px;border-radius:50%;background:conic-gradient({color} {deg}deg, #1a1a2e {deg}deg);display:flex;align-items:center;justify-content:center;">
-                        <div style="width:58px;height:58px;border-radius:50%;background:#16213e;display:flex;flex-direction:column;align-items:center;justify-content:center;">
-                            <span style="color:white;font-size:18px;font-weight:800;line-height:1;">{score_text}</span>
-                        </div>
-                    </div>
-                    <span style="color:#a8a8b3;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-top:4px;text-align:center;line-height:1.4;">{label}</span>
-                </div>'''
 
             # Compute 7d and 30d performance scores per player
             perf_scores = {}
@@ -791,8 +399,8 @@ with fn_tab:
                     <div class="stat-row"><span class="stat-label">Score / Match</span><span class="stat-value">{spmatch:.1f}</span></div>
                     <div class="stat-row"><span class="stat-label">Players Outlived</span><span class="stat-value">{outlived:,}</span></div>
                     <div class="stat-row"><span class="stat-label">Outlived / Match</span><span class="stat-value">{opm}</span></div>
-                    <div class="stat-row"><span class="stat-label">Top 10s</span><span class="stat-value">{top10:,} ({top10 / max(matches, 1) * 100:.1f}%)</span></div>
-                    <div class="stat-row"><span class="stat-label">Top 25s</span><span class="stat-value">{top25:,} ({top25 / max(matches, 1) * 100:.1f}%)</span></div>
+                    <div class="stat-row"><span class="stat-label">Top 10s</span><span class="stat-value">{top10:,} <span style="color:#90caf9;">({top10 / max(matches, 1) * 100:.1f}%)</span></span></div>
+                    <div class="stat-row"><span class="stat-label">Top 25s</span><span class="stat-value">{top25:,} <span style="color:#90caf9;">({top25 / max(matches, 1) * 100:.1f}%)</span></span></div>
                     <div class="stat-row"><span class="stat-label">Hours Played</span><span class="stat-value">{hours:,.1f}</span></div>
                     <div class="stat-row"><span class="stat-label">Last Active</span><span class="stat-value">{last_on}</span></div>
                 </div>""")
@@ -936,58 +544,6 @@ with fn_tab:
             st.markdown("---")
             st.markdown("## Percentile Rankings")
             st.caption("Estimated global percentiles based on community benchmarks. Higher = better among all Fortnite players.")
-
-            # Community-sourced percentile lookup tables
-            # Based on FortniteTracker tier data and community analysis
-            # Format: list of (value, percentile) tuples - interpolated between points
-            PERCENTILE_CURVES = {
-                "K/D": [
-                    (0, 0), (0.5, 15), (0.8, 30), (1.0, 50), (1.3, 65),
-                    (1.5, 72), (2.0, 85), (2.5, 90), (3.0, 95), (4.0, 98), (6.0, 100),
-                ],
-                "Win Rate": [
-                    (0, 0), (1, 15), (2, 25), (3, 35), (5, 50), (7, 60),
-                    (10, 72), (15, 82), (20, 90), (30, 95), (50, 99), (100, 100),
-                ],
-                "Kills/Match": [
-                    (0, 0), (0.5, 15), (1.0, 30), (1.5, 45), (2.0, 58),
-                    (2.5, 68), (3.0, 78), (4.0, 88), (5.0, 93), (7.0, 98), (10.0, 100),
-                ],
-                "Score/Match": [
-                    (0, 0), (100, 15), (200, 30), (300, 45), (400, 55),
-                    (500, 65), (700, 78), (900, 85), (1200, 92), (1500, 96), (2000, 100),
-                ],
-                "Outlived/Match": [
-                    (0, 0), (10, 10), (20, 25), (30, 35), (40, 45),
-                    (50, 55), (60, 65), (70, 78), (80, 88), (90, 95), (95, 100),
-                ],
-            }
-
-            def value_to_percentile(value, curve):
-                """Interpolate a stat value to an estimated percentile."""
-                if value <= curve[0][0]:
-                    return curve[0][1]
-                if value >= curve[-1][0]:
-                    return curve[-1][1]
-                for i in range(len(curve) - 1):
-                    v0, p0 = curve[i]
-                    v1, p1 = curve[i + 1]
-                    if v0 <= value <= v1:
-                        t = (value - v0) / (v1 - v0)
-                        return p0 + t * (p1 - p0)
-                return 50
-
-            def pct_color(pct):
-                """Return color matching Statcast blue-to-red gradient."""
-                if pct >= 90:
-                    return "#c8102e"  # dark red / elite
-                if pct >= 75:
-                    return "#ef5350"  # light red / great
-                if pct >= 50:
-                    return "#b0bec5"  # gray / average
-                if pct >= 25:
-                    return "#64b5f6"  # light blue / below avg
-                return "#1565c0"  # dark blue / poor
 
             # Single player selector for percentile view
             pct_col, _ = st.columns([1, 3])
