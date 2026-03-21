@@ -743,6 +743,231 @@ with fn_tab:
             <div class="cards-scroll">{cards_joined}</div>
             """)
 
+            # Weekly Trend (12 weeks) - right after battle cards, independent of time window
+            if epic_ids:
+                st.markdown("---")
+
+                @st.fragment
+                def render_trend():
+                    TREND_METRICS = {
+                        "K/D": {"key": "kd", "fmt": lambda v: round(v, 2), "axis": "K/D Ratio"},
+                        "Win Rate": {"key": "winRate", "fmt": lambda v: round(v, 1), "axis": "Win Rate %"},
+                        "Kills/Match": {"key": "killsPerMatch", "fmt": lambda v: round(v, 2), "axis": "Kills per Match"},
+                        "Score/Min": {"key": "scorePerMin", "fmt": lambda v: round(v, 1), "axis": "Score per Minute"},
+                        "Score/Match": {"key": "scorePerMatch", "fmt": lambda v: round(v, 1), "axis": "Score per Match"},
+                        "Top 10": {"key": "top10", "fmt": lambda v: int(v), "axis": "Top 10 Finishes"},
+                        "Top 25": {"key": "top25", "fmt": lambda v: int(v), "axis": "Top 25 Finishes"},
+                        "Hours Played": {"key": "minutesPlayed", "fmt": lambda v: round(v / 60, 1), "axis": "Hours Played"},
+                    }
+
+                    selected_metric = st.selectbox(
+                        "Trend Metric", list(TREND_METRICS.keys()), index=0,
+                        key="trend_metric_select"
+                    )
+                    metric_info = TREND_METRICS[selected_metric]
+
+                    st.markdown(f"## {selected_metric} Trend (Past 12 Weeks)")
+                    st.caption("Weekly values from Epic stats proxy. Each point is one week. Independent of the time window filter above.")
+
+                    def week_label(i):
+                        if i == 0:
+                            return "This Week"
+                        if i == 1:
+                            return "Last Week"
+                        return f"Wk {12 - i}"
+                    trend_windows = [(week_label(i), i * 7, (i + 1) * 7) for i in range(12)]
+                    now_ts = int(time.time())
+
+                    if "trend_cache" not in st.session_state:
+                        st.session_state.trend_cache = {}
+
+                    trend_missing = False
+                    for n in names:
+                        aid = epic_ids.get(n)
+                        if not aid:
+                            continue
+                        for lbl, d_s, d_e in trend_windows:
+                            if f"trend_{aid}_{d_s}_{d_e}" not in st.session_state.trend_cache:
+                                trend_missing = True
+                                break
+
+                    if trend_missing:
+                        with st.spinner("Loading trend data..."):
+                            for n in names:
+                                aid = epic_ids.get(n)
+                                if not aid:
+                                    continue
+                                for lbl, d_s, d_e in trend_windows:
+                                    ck = f"trend_{aid}_{d_s}_{d_e}"
+                                    if ck in st.session_state.trend_cache:
+                                        continue
+                                    s_ts = now_ts - (d_e * 86400)
+                                    e_ts = now_ts - (d_s * 86400)
+                                    raw = fetch_stats_epic(aid, s_ts, e_ts)
+                                    if raw:
+                                        parsed = parse_raw_stats(raw)
+                                        ms = epic_parsed_to_mode_stats(parsed)
+                                        o = ms.get("all", {}).get("overall", {})
+                                        st.session_state.trend_cache[ck] = {
+                                            "kd": o.get("kd", 0),
+                                            "kills": o.get("kills", 0),
+                                            "matches": o.get("matches", 0),
+                                            "winRate": o.get("winRate", 0),
+                                            "killsPerMatch": o.get("killsPerMatch", 0),
+                                            "scorePerMin": o.get("scorePerMin", 0),
+                                            "scorePerMatch": o.get("scorePerMatch", 0),
+                                            "top10": o.get("top10", 0),
+                                            "top25": o.get("top25", 0),
+                                            "minutesPlayed": o.get("minutesPlayed", 0),
+                                        }
+                                    else:
+                                        st.session_state.trend_cache[ck] = None
+                                    time.sleep(0.3)
+
+                    fig = go.Figure()
+                    x_labels = [w[0] for w in reversed(trend_windows)]
+                    tmk = metric_info["key"]
+                    fmt_fn = metric_info["fmt"]
+                    for n in names:
+                        aid = epic_ids.get(n)
+                        if not aid:
+                            continue
+                        y_vals = []
+                        for lbl, d_s, d_e in reversed(trend_windows):
+                            ck = f"trend_{aid}_{d_s}_{d_e}"
+                            cached = st.session_state.trend_cache.get(ck)
+                            if cached and cached.get("matches", 0) > 0 and tmk in cached:
+                                y_vals.append(fmt_fn(cached[tmk]))
+                            else:
+                                y_vals.append(None)
+                        fig.add_trace(go.Scatter(
+                            x=x_labels, y=y_vals, mode="lines+markers",
+                            name=all_fn[n]["account"]["name"],
+                            line=dict(width=3), marker=dict(size=10),
+                        ))
+                    fig.update_layout(
+                        template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)",
+                        paper_bgcolor="rgba(0,0,0,0)", height=450,
+                        yaxis_title=metric_info["axis"], font=dict(color="white"),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+                render_trend()
+
+            # Percentile Rankings (click to expand per player)
+            st.markdown("---")
+            st.markdown("## Percentile Rankings")
+            st.caption("Estimated global percentiles based on community benchmarks. Higher = better among all Fortnite players.")
+
+            # Community-sourced percentile lookup tables
+            # Based on FortniteTracker tier data and community analysis
+            # Format: list of (value, percentile) tuples - interpolated between points
+            PERCENTILE_CURVES = {
+                "K/D": [
+                    (0, 0), (0.5, 15), (0.8, 30), (1.0, 50), (1.3, 65),
+                    (1.5, 72), (2.0, 85), (2.5, 90), (3.0, 95), (4.0, 98), (6.0, 100),
+                ],
+                "Win Rate": [
+                    (0, 0), (1, 15), (2, 25), (3, 35), (5, 50), (7, 60),
+                    (10, 72), (15, 82), (20, 90), (30, 95), (50, 99), (100, 100),
+                ],
+                "Kills/Match": [
+                    (0, 0), (0.5, 15), (1.0, 30), (1.5, 45), (2.0, 58),
+                    (2.5, 68), (3.0, 78), (4.0, 88), (5.0, 93), (7.0, 98), (10.0, 100),
+                ],
+                "Score/Match": [
+                    (0, 0), (100, 15), (200, 30), (300, 45), (400, 55),
+                    (500, 65), (700, 78), (900, 85), (1200, 92), (1500, 96), (2000, 100),
+                ],
+                "Score/Min": [
+                    (0, 0), (1, 10), (2, 25), (3, 40), (4, 55),
+                    (5, 65), (6, 75), (8, 85), (10, 92), (12, 96), (15, 100),
+                ],
+                "Outlived/Match": [
+                    (0, 0), (10, 10), (20, 25), (30, 35), (40, 45),
+                    (50, 55), (60, 65), (70, 78), (80, 88), (90, 95), (95, 100),
+                ],
+            }
+
+            def value_to_percentile(value, curve):
+                """Interpolate a stat value to an estimated percentile."""
+                if value <= curve[0][0]:
+                    return curve[0][1]
+                if value >= curve[-1][0]:
+                    return curve[-1][1]
+                for i in range(len(curve) - 1):
+                    v0, p0 = curve[i]
+                    v1, p1 = curve[i + 1]
+                    if v0 <= value <= v1:
+                        t = (value - v0) / (v1 - v0)
+                        return p0 + t * (p1 - p0)
+                return 50
+
+            def pct_color(pct):
+                """Return color based on percentile tier."""
+                if pct >= 90:
+                    return "#e94560"  # red/elite
+                if pct >= 70:
+                    return "#f5a623"  # orange/great
+                if pct >= 40:
+                    return "#4ecdc4"  # teal/average
+                return "#666"  # gray/below avg
+
+            for name in names:
+                o = player_mode(name)
+                if not o or not o.get("matches", 0):
+                    continue
+                display = all_fn[name]["account"]["name"]
+                m = max(o.get("matches", 1) or 1, 1)
+
+                stats_for_pct = {
+                    "K/D": o.get("kd", 0) or 0,
+                    "Win Rate": o.get("winRate", 0) or 0,
+                    "Kills/Match": o.get("killsPerMatch", 0) or 0,
+                    "Score/Match": o.get("scorePerMatch", 0) or 0,
+                    "Score/Min": o.get("scorePerMin", 0) or 0,
+                    "Outlived/Match": (o.get("playersOutlived", 0) or 0) / m,
+                }
+
+                bars_html = ""
+                for stat_name, stat_val in stats_for_pct.items():
+                    pct = value_to_percentile(stat_val, PERCENTILE_CURVES[stat_name])
+                    pct = max(0, min(100, round(pct)))
+                    color = pct_color(pct)
+                    # Format display value
+                    if stat_name == "Win Rate":
+                        val_str = f"{stat_val:.1f}%"
+                    elif stat_name in ("K/D", "Kills/Match"):
+                        val_str = f"{stat_val:.2f}"
+                    elif stat_name in ("Score/Match", "Score/Min"):
+                        val_str = f"{stat_val:.1f}"
+                    else:
+                        val_str = f"{stat_val:.1f}"
+
+                    bars_html += f"""
+                    <div style="display:flex;align-items:center;margin-bottom:6px;">
+                        <div style="width:110px;font-size:0.8em;color:#a8a8b3;flex-shrink:0;">{stat_name}</div>
+                        <div style="flex:1;background:#1a1a2e;border-radius:8px;height:22px;position:relative;overflow:hidden;">
+                            <div style="width:{pct}%;height:100%;background:linear-gradient(90deg,#1a1a2e,{color});border-radius:8px;"></div>
+                            <div style="position:absolute;left:{max(pct - 4, 1)}%;top:50%;transform:translateY(-50%);background:{color};color:white;font-size:0.7em;font-weight:800;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;">{pct}</div>
+                        </div>
+                        <div style="width:55px;text-align:right;font-size:0.8em;color:white;font-weight:700;flex-shrink:0;padding-left:8px;">{val_str}</div>
+                    </div>"""
+
+                with st.expander(f"{display} - Percentile Rankings"):
+                    st.html(f"""
+                    <div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);border-radius:12px;padding:16px;border:1px solid #e94560;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                            <span style="color:#a8a8b3;font-size:0.7em;text-transform:uppercase;letter-spacing:1px;">POOR</span>
+                            <span style="color:#a8a8b3;font-size:0.7em;text-transform:uppercase;letter-spacing:1px;">AVERAGE</span>
+                            <span style="color:#a8a8b3;font-size:0.7em;text-transform:uppercase;letter-spacing:1px;">GREAT</span>
+                        </div>
+                        {bars_html}
+                        <div style="margin-top:8px;font-size:0.65em;color:#666;">Estimated percentiles based on community benchmarks. Not official Epic data.</div>
+                    </div>
+                    """)
+
             # Charts
             st.markdown("---")
             st.markdown("## Squad Comparison")
@@ -870,118 +1095,6 @@ with fn_tab:
                 st.dataframe(input_data, use_container_width=True, hide_index=True)
             else:
                 st.caption("No per-input stats available (most players only show combined).")
-
-            # Weekly Trend (12 weeks) - static, independent of time window
-            if epic_ids:
-                st.markdown("---")
-
-                @st.fragment
-                def render_trend():
-                    TREND_METRICS = {
-                        "K/D": {"key": "kd", "fmt": lambda v: round(v, 2), "axis": "K/D Ratio"},
-                        "Win Rate": {"key": "winRate", "fmt": lambda v: round(v, 1), "axis": "Win Rate %"},
-                        "Kills/Match": {"key": "killsPerMatch", "fmt": lambda v: round(v, 2), "axis": "Kills per Match"},
-                        "Score/Min": {"key": "scorePerMin", "fmt": lambda v: round(v, 1), "axis": "Score per Minute"},
-                        "Score/Match": {"key": "scorePerMatch", "fmt": lambda v: round(v, 1), "axis": "Score per Match"},
-                        "Top 10": {"key": "top10", "fmt": lambda v: int(v), "axis": "Top 10 Finishes"},
-                        "Top 25": {"key": "top25", "fmt": lambda v: int(v), "axis": "Top 25 Finishes"},
-                        "Hours Played": {"key": "minutesPlayed", "fmt": lambda v: round(v / 60, 1), "axis": "Hours Played"},
-                    }
-
-                    selected_metric = st.selectbox(
-                        "Trend Metric", list(TREND_METRICS.keys()), index=0,
-                        key="trend_metric_select"
-                    )
-                    metric_info = TREND_METRICS[selected_metric]
-
-                    st.markdown(f"## {selected_metric} Trend (Past 12 Weeks)")
-                    st.caption("Weekly values from Epic stats proxy. Each point is one week. Independent of the time window filter above.")
-
-                    def week_label(i):
-                        if i == 0:
-                            return "This Week"
-                        if i == 1:
-                            return "Last Week"
-                        return f"Wk {12 - i}"
-                    trend_windows = [(week_label(i), i * 7, (i + 1) * 7) for i in range(12)]
-                    now_ts = int(time.time())
-
-                    if "trend_cache" not in st.session_state:
-                        st.session_state.trend_cache = {}
-
-                    trend_missing = False
-                    for n in names:
-                        aid = epic_ids.get(n)
-                        if not aid:
-                            continue
-                        for lbl, d_s, d_e in trend_windows:
-                            if f"trend_{aid}_{d_s}_{d_e}" not in st.session_state.trend_cache:
-                                trend_missing = True
-                                break
-
-                    if trend_missing:
-                        with st.spinner("Loading trend data..."):
-                            for n in names:
-                                aid = epic_ids.get(n)
-                                if not aid:
-                                    continue
-                                for lbl, d_s, d_e in trend_windows:
-                                    ck = f"trend_{aid}_{d_s}_{d_e}"
-                                    if ck in st.session_state.trend_cache:
-                                        continue
-                                    s_ts = now_ts - (d_e * 86400)
-                                    e_ts = now_ts - (d_s * 86400)
-                                    raw = fetch_stats_epic(aid, s_ts, e_ts)
-                                    if raw:
-                                        parsed = parse_raw_stats(raw)
-                                        ms = epic_parsed_to_mode_stats(parsed)
-                                        o = ms.get("all", {}).get("overall", {})
-                                        st.session_state.trend_cache[ck] = {
-                                            "kd": o.get("kd", 0),
-                                            "kills": o.get("kills", 0),
-                                            "matches": o.get("matches", 0),
-                                            "winRate": o.get("winRate", 0),
-                                            "killsPerMatch": o.get("killsPerMatch", 0),
-                                            "scorePerMin": o.get("scorePerMin", 0),
-                                            "scorePerMatch": o.get("scorePerMatch", 0),
-                                            "top10": o.get("top10", 0),
-                                            "top25": o.get("top25", 0),
-                                            "minutesPlayed": o.get("minutesPlayed", 0),
-                                        }
-                                    else:
-                                        st.session_state.trend_cache[ck] = None
-                                    time.sleep(0.3)
-
-                    fig = go.Figure()
-                    x_labels = [w[0] for w in reversed(trend_windows)]
-                    mk = metric_info["key"]
-                    fmt_fn = metric_info["fmt"]
-                    for n in names:
-                        aid = epic_ids.get(n)
-                        if not aid:
-                            continue
-                        y_vals = []
-                        for lbl, d_s, d_e in reversed(trend_windows):
-                            ck = f"trend_{aid}_{d_s}_{d_e}"
-                            cached = st.session_state.trend_cache.get(ck)
-                            if cached and cached.get("matches", 0) > 0 and mk in cached:
-                                y_vals.append(fmt_fn(cached[mk]))
-                            else:
-                                y_vals.append(None)
-                        fig.add_trace(go.Scatter(
-                            x=x_labels, y=y_vals, mode="lines+markers",
-                            name=all_fn[n]["account"]["name"],
-                            line=dict(width=3), marker=dict(size=10),
-                        ))
-                    fig.update_layout(
-                        template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)",
-                        paper_bgcolor="rgba(0,0,0,0)", height=450,
-                        yaxis_title=metric_info["axis"], font=dict(color="white"),
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-
-                render_trend()
 
             # Data Definitions
             st.markdown("---")
