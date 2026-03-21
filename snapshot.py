@@ -1,9 +1,10 @@
-"""Daily stats snapshot - fetches yesterday's stats for all players and writes to MotherDuck.
+"""Weekly stats snapshot - fetches weekly stats for all players and writes to MotherDuck.
 
 Usage:
-    python snapshot.py              # Fetch yesterday's stats and insert
-    python snapshot.py --backfill 30  # Backfill last 30 days (one row per day per player)
+    python snapshot.py              # Fetch last week's stats and insert
+    python snapshot.py --backfill 12  # Backfill last 12 weeks
     python snapshot.py --setup      # Create the MotherDuck table
+    python snapshot.py --check      # Show what's in the DB
 
 Requires:
     - MOTHERDUCK_TOKEN env var or in .env file
@@ -13,7 +14,7 @@ Requires:
 import os
 import sys
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 import duckdb
 
@@ -32,16 +33,16 @@ from epic_auth import get_valid_token, lookup_account_by_name, fetch_stats_epic,
 MOTHERDUCK_TOKEN = os.environ.get("MOTHERDUCK_TOKEN", "")
 DB_URL = f"md:squad_tracker?motherduck_token={MOTHERDUCK_TOKEN}"
 
-# All Fortnite players to track
+# All Fortnite players to track - use Epic display names for lookup
 PLAYERS = [
-    {"name": "astros44", "type": "xbl"},
-    {"name": "zippomanjingles", "type": "psn"},
-    {"name": "crazy in basye", "type": "xbl"},
-    {"name": "i7vosunz458", "type": "xbl"},
-    {"name": "callmepot", "type": "epic"},
-    {"name": "Jbone", "type": "epic"},
-    {"name": "hailedcanvas141", "type": "xbl"},
-    {"name": "mrfox733", "type": "xbl"},
+    {"name": "astros44", "epic_name": "TLP_ReMuS"},
+    {"name": "zippomanjingles", "epic_name": "Zippomanjingles"},
+    {"name": "crazy in basye", "epic_name": "Crazy in Basye"},
+    {"name": "i7vosunz458", "epic_name": "i7VoSUNZ458"},
+    {"name": "callmepot", "epic_name": "callmepot"},
+    {"name": "Jbone", "epic_name": "Jbone"},
+    {"name": "hailedcanvas141", "epic_name": "DANDEBORD"},
+    {"name": "mrfox733", "epic_name": "mrfox733"},
 ]
 
 
@@ -50,13 +51,14 @@ def get_connection():
 
 
 def setup_table():
-    """Create the daily_stats table in MotherDuck."""
+    """Create the weekly_stats table in MotherDuck."""
     con = get_connection()
     con.execute("""
-        CREATE TABLE IF NOT EXISTS daily_stats (
+        CREATE TABLE IF NOT EXISTS weekly_stats (
             player_name VARCHAR,
             epic_account_id VARCHAR,
-            date DATE,
+            week_start DATE,
+            week_end DATE,
             kills INTEGER,
             deaths INTEGER,
             wins INTEGER,
@@ -64,11 +66,16 @@ def setup_table():
             score INTEGER,
             players_outlived INTEGER,
             minutes_played INTEGER,
+            kd DOUBLE,
+            kills_per_match DOUBLE,
+            win_rate DOUBLE,
             created_at TIMESTAMP DEFAULT current_timestamp,
-            PRIMARY KEY (player_name, date)
+            PRIMARY KEY (player_name, week_start)
         )
     """)
-    print("Table daily_stats created (or already exists).")
+    # Drop old daily_stats table if it exists (was never populated)
+    con.execute("DROP TABLE IF EXISTS daily_stats")
+    print("Table weekly_stats created (or already exists).")
     con.close()
 
 
@@ -81,26 +88,27 @@ def resolve_account_ids():
 
     ids = {}
     for p in PLAYERS:
-        result = lookup_account_by_name(p["name"], token)
+        display = p.get("epic_name", p["name"])
+        result = lookup_account_by_name(display, token)
         if result:
             ids[p["name"]] = result["id"]
-            print(f"  {p['name']} -> {result['id']}")
+            print(f"  {p['name']} ({display}) -> {result['id']}")
         else:
-            print(f"  {p['name']} -> NOT FOUND")
+            print(f"  {p['name']} ({display}) -> NOT FOUND")
         time.sleep(0.3)
     return ids
 
 
-def fetch_day_stats(account_id, target_date):
-    """Fetch stats for a single day."""
-    start = int(datetime.combine(target_date, datetime.min.time()).timestamp())
-    end = int(datetime.combine(target_date, datetime.max.time()).timestamp())
-    raw = fetch_stats_epic(account_id, start, end)
+def fetch_week_stats(account_id, week_start, week_end):
+    """Fetch stats for a week using epoch timestamps."""
+    import datetime
+    start_ts = int(datetime.datetime.combine(week_start, datetime.datetime.min.time()).timestamp())
+    end_ts = int(datetime.datetime.combine(week_end, datetime.datetime.max.time()).timestamp())
+    raw = fetch_stats_epic(account_id, start_ts, end_ts)
     if not raw:
         return None
 
     parsed = parse_raw_stats(raw)
-    # Sum across all inputs and playlists
     totals = {"kills": 0, "deaths": 0, "wins": 0, "matches": 0,
               "score": 0, "players_outlived": 0, "minutes_played": 0}
     for input_type, playlists in parsed.items():
@@ -112,11 +120,36 @@ def fetch_day_stats(account_id, target_date):
             totals["players_outlived"] += metrics.get("playersoutlived", 0)
             totals["minutes_played"] += metrics.get("minutesplayed", 0)
     totals["deaths"] = max(totals["matches"] - totals["wins"], 0)
+
+    if totals["matches"] == 0:
+        return None
+
+    totals["kd"] = round(totals["kills"] / max(totals["deaths"], 1), 2)
+    totals["kills_per_match"] = round(totals["kills"] / max(totals["matches"], 1), 2)
+    totals["win_rate"] = round(totals["wins"] / max(totals["matches"], 1) * 100, 1)
     return totals
 
 
-def snapshot(target_date=None, backfill_days=None):
-    """Fetch and store stats."""
+def get_week_ranges(num_weeks):
+    """Get week ranges (Mon-Sun) going back num_weeks from the most recent completed week."""
+    today = date.today()
+    # Find last Sunday (end of most recent completed week)
+    days_since_sunday = (today.weekday() + 1) % 7
+    if days_since_sunday == 0:
+        last_sunday = today - timedelta(days=7)
+    else:
+        last_sunday = today - timedelta(days=days_since_sunday)
+
+    weeks = []
+    for i in range(num_weeks):
+        week_end = last_sunday - timedelta(weeks=i)
+        week_start = week_end - timedelta(days=6)
+        weeks.append((week_start, week_end))
+    return list(reversed(weeks))
+
+
+def snapshot(num_weeks=1):
+    """Fetch and store weekly stats."""
     if not MOTHERDUCK_TOKEN:
         print("Set MOTHERDUCK_TOKEN in .env or environment.")
         return
@@ -127,42 +160,57 @@ def snapshot(target_date=None, backfill_days=None):
         return
 
     con = get_connection()
+    weeks = get_week_ranges(num_weeks)
 
-    if backfill_days:
-        dates = [date.today() - timedelta(days=i) for i in range(1, backfill_days + 1)]
-    else:
-        dates = [target_date or date.today() - timedelta(days=1)]
-
-    for d in dates:
-        print(f"\n--- {d} ---")
+    for week_start, week_end in weeks:
+        print(f"\n--- {week_start} to {week_end} ---")
         for name, aid in ids.items():
-            # Check if already exists
             existing = con.execute(
-                "SELECT 1 FROM daily_stats WHERE player_name = ? AND date = ?",
-                [name, d]
+                "SELECT 1 FROM weekly_stats WHERE player_name = ? AND week_start = ?",
+                [name, week_start]
             ).fetchone()
             if existing:
                 print(f"  {name}: already stored, skipping")
                 continue
 
-            stats = fetch_day_stats(aid, d)
-            if not stats or stats["matches"] == 0:
+            stats = fetch_week_stats(aid, week_start, week_end)
+            if not stats:
                 print(f"  {name}: no games played")
                 continue
 
             con.execute("""
-                INSERT INTO daily_stats (player_name, epic_account_id, date,
-                    kills, deaths, wins, matches, score, players_outlived, minutes_played)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, [name, aid, d,
+                INSERT INTO weekly_stats (player_name, epic_account_id, week_start, week_end,
+                    kills, deaths, wins, matches, score, players_outlived, minutes_played,
+                    kd, kills_per_match, win_rate)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [name, aid, week_start, week_end,
                   stats["kills"], stats["deaths"], stats["wins"], stats["matches"],
-                  stats["score"], stats["players_outlived"], stats["minutes_played"]])
-            kd = stats["kills"] / max(stats["deaths"], 1)
-            print(f"  {name}: {stats['matches']} matches, {stats['kills']} kills, K/D {kd:.2f}")
+                  stats["score"], stats["players_outlived"], stats["minutes_played"],
+                  stats["kd"], stats["kills_per_match"], stats["win_rate"]])
+            print(f"  {name}: {stats['matches']} matches, K/D {stats['kd']}, Win% {stats['win_rate']}")
             time.sleep(0.5)
 
     con.close()
     print("\nDone!")
+
+
+def check_db():
+    """Show what's in the database."""
+    con = get_connection()
+    rows = con.execute("""
+        SELECT player_name, week_start, week_end, matches, kills, kd, win_rate
+        FROM weekly_stats
+        ORDER BY week_start, player_name
+    """).fetchall()
+    if not rows:
+        print("No data in weekly_stats.")
+    else:
+        print(f"{'Player':<20} {'Week':<25} {'Matches':>8} {'Kills':>7} {'K/D':>6} {'Win%':>6}")
+        print("-" * 75)
+        for r in rows:
+            print(f"{r[0]:<20} {r[1]} - {r[2]}  {r[3]:>8} {r[4]:>7} {r[5]:>6.2f} {r[6]:>5.1f}%")
+    print(f"\nTotal rows: {len(rows)}")
+    con.close()
 
 
 if __name__ == "__main__":
@@ -170,7 +218,9 @@ if __name__ == "__main__":
         setup_table()
     elif "--backfill" in sys.argv:
         idx = sys.argv.index("--backfill")
-        days = int(sys.argv[idx + 1]) if idx + 1 < len(sys.argv) else 30
-        snapshot(backfill_days=days)
+        weeks = int(sys.argv[idx + 1]) if idx + 1 < len(sys.argv) else 12
+        snapshot(num_weeks=weeks)
+    elif "--check" in sys.argv:
+        check_db()
     else:
-        snapshot()
+        snapshot(num_weeks=1)
