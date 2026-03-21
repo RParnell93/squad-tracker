@@ -1,0 +1,24 @@
+name: Daily Stats Snapshot
+
+on:
+  schedule:
+    - cron: '0 8 * * *'  # 8am UTC (3am EST) daily
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install requests duckdb==1.4.1
+
+      - name: Run daily snapshot
+        env:
+          MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
+        run: python snapshot.py
