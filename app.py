@@ -871,84 +871,85 @@ with fn_tab:
             else:
                 st.caption("No per-input stats available (most players only show combined).")
 
-            # K/D Trend (weekly segments over 12 weeks)
+            # K/D Trend (weekly segments over 12 weeks) - static, independent of time window
             if epic_ids:
                 st.markdown("---")
                 st.markdown("## K/D Trend (Past 12 Weeks)")
-                st.caption("Weekly K/D calculated from Epic stats proxy. Each point shows K/D for that week only.")
+                st.caption("Weekly K/D calculated from Epic stats proxy. Each point shows K/D for that week only. This chart is independent of the time window filter above.")
 
-                windows = [(f"Wk {i+1}" if i > 0 else "This Week", i * 7, (i + 1) * 7) for i in range(12)]
-                now = int(time.time())
+                @st.fragment
+                def render_kd_trend():
+                    trend_windows = [(f"Wk {i+1}" if i > 0 else "This Week", i * 7, (i + 1) * 7) for i in range(12)]
+                    now_ts = int(time.time())
 
-                # Fetch all needed windows
-                if "trend_cache" not in st.session_state:
-                    st.session_state.trend_cache = {}
+                    if "trend_cache" not in st.session_state:
+                        st.session_state.trend_cache = {}
 
-                trend_missing = False
-                for name in names:
-                    aid = epic_ids.get(name)
-                    if not aid:
-                        continue
-                    for label, d_start, d_end in windows:
-                        ck = f"trend_{aid}_{d_start}_{d_end}"
-                        if ck not in st.session_state.trend_cache:
-                            trend_missing = True
-                            break
+                    trend_missing = False
+                    for n in names:
+                        aid = epic_ids.get(n)
+                        if not aid:
+                            continue
+                        for lbl, d_s, d_e in trend_windows:
+                            if f"trend_{aid}_{d_s}_{d_e}" not in st.session_state.trend_cache:
+                                trend_missing = True
+                                break
 
-                if trend_missing:
-                    with st.spinner("Loading K/D trend data..."):
-                        for name in names:
-                            aid = epic_ids.get(name)
-                            if not aid:
-                                continue
-                            for label, d_start, d_end in windows:
-                                ck = f"trend_{aid}_{d_start}_{d_end}"
-                                if ck in st.session_state.trend_cache:
+                    if trend_missing:
+                        with st.spinner("Loading K/D trend data..."):
+                            for n in names:
+                                aid = epic_ids.get(n)
+                                if not aid:
                                     continue
-                                start_ts = now - (d_end * 86400)
-                                end_ts = now - (d_start * 86400)
-                                raw = fetch_stats_epic(aid, start_ts, end_ts)
-                                if raw:
-                                    parsed = parse_raw_stats(raw)
-                                    mode_stats = epic_parsed_to_mode_stats(parsed)
-                                    o = mode_stats.get("all", {}).get("overall", {})
-                                    st.session_state.trend_cache[ck] = {
-                                        "kd": o.get("kd", 0),
-                                        "kills": o.get("kills", 0),
-                                        "matches": o.get("matches", 0),
-                                        "winRate": o.get("winRate", 0),
-                                    }
-                                else:
-                                    st.session_state.trend_cache[ck] = None
-                                time.sleep(0.3)
+                                for lbl, d_s, d_e in trend_windows:
+                                    ck = f"trend_{aid}_{d_s}_{d_e}"
+                                    if ck in st.session_state.trend_cache:
+                                        continue
+                                    s_ts = now_ts - (d_e * 86400)
+                                    e_ts = now_ts - (d_s * 86400)
+                                    raw = fetch_stats_epic(aid, s_ts, e_ts)
+                                    if raw:
+                                        parsed = parse_raw_stats(raw)
+                                        ms = epic_parsed_to_mode_stats(parsed)
+                                        o = ms.get("all", {}).get("overall", {})
+                                        st.session_state.trend_cache[ck] = {
+                                            "kd": o.get("kd", 0),
+                                            "kills": o.get("kills", 0),
+                                            "matches": o.get("matches", 0),
+                                            "winRate": o.get("winRate", 0),
+                                        }
+                                    else:
+                                        st.session_state.trend_cache[ck] = None
+                                    time.sleep(0.3)
 
-                # Build the chart
-                fig = go.Figure()
-                x_labels = [w[0] for w in reversed(windows)]
-                for name in names:
-                    aid = epic_ids.get(name)
-                    if not aid:
-                        continue
-                    y_vals = []
-                    for label, d_start, d_end in reversed(windows):
-                        ck = f"trend_{aid}_{d_start}_{d_end}"
-                        cached = st.session_state.trend_cache.get(ck)
-                        if cached and cached.get("matches", 0) > 0:
-                            y_vals.append(round(cached["kd"], 2))
-                        else:
-                            y_vals.append(None)
-                    fig.add_trace(go.Scatter(
-                        x=x_labels, y=y_vals, mode="lines+markers",
-                        name=all_fn[name]["account"]["name"],
-                        line=dict(width=3), marker=dict(size=10),
-                    ))
-                fig.update_layout(
-                    template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)",
-                    paper_bgcolor="rgba(0,0,0,0)", height=450,
-                    yaxis_title="K/D Ratio", font=dict(color="white"),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                )
-                st.plotly_chart(fig, use_container_width=True)
+                    fig = go.Figure()
+                    x_labels = [w[0] for w in reversed(trend_windows)]
+                    for n in names:
+                        aid = epic_ids.get(n)
+                        if not aid:
+                            continue
+                        y_vals = []
+                        for lbl, d_s, d_e in reversed(trend_windows):
+                            ck = f"trend_{aid}_{d_s}_{d_e}"
+                            cached = st.session_state.trend_cache.get(ck)
+                            if cached and cached.get("matches", 0) > 0:
+                                y_vals.append(round(cached["kd"], 2))
+                            else:
+                                y_vals.append(None)
+                        fig.add_trace(go.Scatter(
+                            x=x_labels, y=y_vals, mode="lines+markers",
+                            name=all_fn[n]["account"]["name"],
+                            line=dict(width=3), marker=dict(size=10),
+                        ))
+                    fig.update_layout(
+                        template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)",
+                        paper_bgcolor="rgba(0,0,0,0)", height=450,
+                        yaxis_title="K/D Ratio", font=dict(color="white"),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+                render_kd_trend()
 
             # Data Definitions
             st.markdown("---")
