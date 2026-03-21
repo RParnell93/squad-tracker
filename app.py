@@ -3,6 +3,7 @@ import requests
 import json
 import os
 import time
+from datetime import date, datetime, timedelta
 import plotly.graph_objects as go
 from epic_auth import (
     load_tokens, get_valid_token, lookup_account_by_name,
@@ -556,28 +557,40 @@ with fn_tab:
                     if not aid:
                         return None
                     cache_key = f"epic_{aid}_{days}"
-                    if "epic_cache" not in st.session_state:
-                        st.session_state.epic_cache = {}
-                    if cache_key not in st.session_state.epic_cache:
-                        parsed = stats_for_window(aid, days=days)
-                        if parsed:
-                            st.session_state.epic_cache[cache_key] = epic_parsed_to_mode_stats(parsed)
-                        else:
-                            st.session_state.epic_cache[cache_key] = None
-                    return st.session_state.epic_cache[cache_key]
+                    return st.session_state.get("epic_cache", {}).get(cache_key)
+                if time_window == "Custom Range":
+                    aid = epic_ids.get(name)
+                    if not aid:
+                        return None
+                    start_ts = int(datetime.combine(start_date, datetime.min.time()).timestamp())
+                    end_ts = int(datetime.combine(end_date, datetime.max.time()).timestamp())
+                    cache_key = f"epic_{aid}_{start_ts}_{end_ts}"
+                    return st.session_state.get("epic_cache", {}).get(cache_key)
                 return data["stats"]
 
             # Time window toggle
             time_options = ["Lifetime", "Season"]
             if epic_ids:
-                time_options += ["Last 7 Days", "Last 30 Days"]
+                time_options += ["Last 7 Days", "Last 30 Days", "Custom Range"]
             time_window = st.radio("Time Window", time_options, horizontal=True, key="fn_time_window")
 
+            custom_days = None
+            if time_window == "Custom Range":
+                col_start, col_end = st.columns(2)
+                with col_start:
+                    start_date = st.date_input("Start Date", value=date.today() - timedelta(days=14), key="fn_start_date")
+                with col_end:
+                    end_date = st.date_input("End Date", value=date.today(), key="fn_end_date")
+                if start_date > end_date:
+                    st.error("Start date must be before end date.")
+                    st.stop()
+
             # Fetch Epic window stats if needed (batch all players)
+            if "epic_cache" not in st.session_state:
+                st.session_state.epic_cache = {}
+
             if time_window in ("Last 7 Days", "Last 30 Days") and epic_ids:
                 days = 7 if time_window == "Last 7 Days" else 30
-                if "epic_cache" not in st.session_state:
-                    st.session_state.epic_cache = {}
                 missing = [n for n in all_fn if epic_ids.get(n) and f"epic_{epic_ids[n]}_{days}" not in st.session_state.epic_cache]
                 if missing:
                     with st.spinner(f"Loading {time_window.lower()} stats..."):
@@ -587,6 +600,24 @@ with fn_tab:
                             cache_key = f"epic_{aid}_{days}"
                             if parsed:
                                 st.session_state.epic_cache[cache_key] = epic_parsed_to_mode_stats(parsed)
+                            else:
+                                st.session_state.epic_cache[cache_key] = None
+                            time.sleep(0.3)
+
+            elif time_window == "Custom Range" and epic_ids:
+                start_ts = int(datetime.combine(start_date, datetime.min.time()).timestamp())
+                end_ts = int(datetime.combine(end_date, datetime.max.time()).timestamp())
+                range_key = f"{start_ts}_{end_ts}"
+                missing = [n for n in all_fn if epic_ids.get(n) and f"epic_{epic_ids[n]}_{range_key}" not in st.session_state.epic_cache]
+                if missing:
+                    with st.spinner(f"Loading stats for {start_date} to {end_date}..."):
+                        for name in missing:
+                            aid = epic_ids[name]
+                            parsed_raw = fetch_stats_epic(aid, start_ts, end_ts)
+                            cache_key = f"epic_{aid}_{range_key}"
+                            if parsed_raw:
+                                from epic_auth import parse_raw_stats
+                                st.session_state.epic_cache[cache_key] = epic_parsed_to_mode_stats(parse_raw_stats(parsed_raw))
                             else:
                                 st.session_state.epic_cache[cache_key] = None
                             time.sleep(0.3)
