@@ -254,10 +254,11 @@ def epic_parsed_to_mode_stats(parsed):
         "squad": ["defaultsquad", "nobuildbrsquad", "sunflowernobuildsquad",
                   "arseniccore_squads_maxfog", "punchberrynobuildsquad",
                   "mash_squads_legacy"],
+        "blitz": ["blitz"],
     }
 
     totals = {}  # mode -> {metric: value}
-    for mode in ["solo", "duo", "squad", "overall"]:
+    for mode in ["solo", "duo", "squad", "blitz", "overall"]:
         totals[mode] = {}
 
     for input_type, playlists in parsed.items():
@@ -1110,10 +1111,10 @@ with fn_tab:
                               template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=500, font=dict(color="white"))
             st.plotly_chart(fig, use_container_width=True)
 
-            # Mode Breakdown
+            # Game Mode Breakdown
             st.markdown("---")
-            st.markdown("## Mode Breakdown")
-            mode_tab_sel = st.selectbox("Select Mode", ["Overall", "Solo", "Duo", "Squad", "LTM"], key="fn_mode")
+            st.markdown("## Game Mode Breakdown")
+            mode_tab_sel = st.selectbox("Select Mode", ["Overall", "Solo", "Duo", "Squad", "Blitz", "LTM"], key="fn_mode")
             mk = mode_tab_sel.lower()
             table_data = []
             for name in names:
