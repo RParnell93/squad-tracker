@@ -151,6 +151,27 @@ def get_fortnite_api_key():
     return st.session_state.get("fn_api_key_input", "")
 
 
+DEFAULT_FORTNITE_PLAYERS = [
+    {"name": "astros44", "type": "xbl", "platform": "Xbox"},
+    {"name": "zippomanjingles", "type": "psn", "platform": "PlayStation"},
+    {"name": "crazy in basye", "type": "xbl", "platform": "Xbox"},
+    {"name": "i7vosunz458", "type": "xbl", "platform": "Xbox"},
+    {"name": "callmepot", "type": "epic", "platform": "Epic (PC)"},
+]
+
+DEFAULT_OW2_PLAYERS = [
+    {"name": "bigdumpy", "player_id": "f057ab8ea67c8bb4a4a126a7d603%7C4e6a5ab09612cbe141cc5cca93318eab"},
+    {"name": "meowforheals", "player_id": "ff5ba39db57e89a5ecf17be3c903a40a4a%7C675748059c6913c6fafb628a567232f0"},
+    {"name": "classic", "player_id": "f152ad99a07898e0baa120a7d4%7C156e54723040e35b417b08d93b151741"},
+    {"name": "batzz0"},
+    {"name": "gascan"},
+    {"name": "greybeast"},
+    {"name": "jbone"},
+    {"name": "Paulpummeler"},
+    {"name": "i7vosunz458"},
+]
+
+
 def load_squad():
     if os.path.exists(SAVE_FILE):
         with open(SAVE_FILE) as f:
@@ -158,7 +179,10 @@ def load_squad():
             data.pop("fortnite_api_key", None)
             data.pop("api_key", None)
             return data
-    return {"fortnite_players": [], "ow2_players": []}
+    return {
+        "fortnite_players": list(DEFAULT_FORTNITE_PLAYERS),
+        "ow2_players": list(DEFAULT_OW2_PLAYERS),
+    }
 
 
 def save_squad(data):
