@@ -572,7 +572,7 @@ with ow2_tab:
     if not ow2_players:
         st.info("Add OW2 players in the sidebar (switch to Overwatch 2 first).")
     else:
-        if st.button("Refresh Stats"):
+        if st.button("Refresh Stats", key="ow2_refresh"):
             st.session_state.ow2_cache = {}
 
         all_ow2 = {}
