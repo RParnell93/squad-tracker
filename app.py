@@ -168,10 +168,10 @@ DEFAULT_OW2_PLAYERS = [
     {"name": "bigdumpy", "player_id": "f057ab8ea67c8bb4a4a126a7d603%7C4e6a5ab09612cbe141cc5cca93318eab"},
     {"name": "meowforheals", "player_id": "ff5ba39db57e89a5ecf17be3c903a40a4a%7C675748059c6913c6fafb628a567232f0"},
     {"name": "classic", "player_id": "f152ad99a07898e0baa120a7d4%7C156e54723040e35b417b08d93b151741"},
-    {"name": "Batzz"},
-    {"name": "GasCan"},
-    {"name": "GreyBeast"},
-    {"name": "Jbone"},
+    {"name": "Batzz", "player_id": "d05fb890a93cc9f9bea1%7Cee7e46b8d5cd02a21bd084bd5004fdbe"},
+    {"name": "GasCan", "player_id": "d55fbfa9b27fd6fcb8a220a4%7C60d238a9723f0c5c425ab4c56d4579b8"},
+    {"name": "GreyBeast", "player_id": "d54ca99391749abefdbd25a7d607a5%7C2b7fa8e1b80a57998ee25a9d17f99925"},
+    {"name": "Jbone", "player_id": "d85ca384b63ccafcbda92e%7C508837fd0c53ce752effa237b8d205a8"},
     {"name": "Paulpummeler"},
     {"name": "i7vosunz458"},
 ]
@@ -199,8 +199,10 @@ if "squad" not in st.session_state:
     st.session_state.squad = load_squad()
     if "players" in st.session_state.squad:
         st.session_state.squad["fortnite_players"] = st.session_state.squad.pop("players", [])
-    if "ow2_players" not in st.session_state.squad:
-        st.session_state.squad["ow2_players"] = []
+    if not st.session_state.squad.get("ow2_players"):
+        st.session_state.squad["ow2_players"] = list(DEFAULT_OW2_PLAYERS)
+    if not st.session_state.squad.get("fortnite_players"):
+        st.session_state.squad["fortnite_players"] = list(DEFAULT_FORTNITE_PLAYERS)
 
 if "fn_cache" not in st.session_state:
     st.session_state.fn_cache = {}
@@ -439,17 +441,7 @@ else:  # OW2
     st.sidebar.markdown("---")
     st.sidebar.subheader("Add OW2 Player")
 
-    ow2_preset_players = [
-        {"name": "bigdumpy", "player_id": "f057ab8ea67c8bb4a4a126a7d603%7C4e6a5ab09612cbe141cc5cca93318eab"},
-        {"name": "meowforheals", "player_id": "ff5ba39db57e89a5ecf17be3c903a40a4a%7C675748059c6913c6fafb628a567232f0"},
-        {"name": "classic", "player_id": "f152ad99a07898e0baa120a7d4%7C156e54723040e35b417b08d93b151741"},
-        {"name": "Batzz"},
-        {"name": "GasCan"},
-        {"name": "GreyBeast"},
-        {"name": "Jbone"},
-        {"name": "Paulpummeler"},
-        {"name": "i7vosunz458"},
-    ]
+    ow2_preset_players = list(DEFAULT_OW2_PLAYERS)
     ow2_current = {p["name"] for p in st.session_state.squad.get("ow2_players", [])}
     ow2_available = [p for p in ow2_preset_players if p["name"] not in ow2_current]
 
