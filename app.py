@@ -715,7 +715,7 @@ with fn_tab:
                             <span style="color:white;font-size:18px;font-weight:800;line-height:1;">{score_text}</span>
                         </div>
                     </div>
-                    <span style="color:#a8a8b3;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-top:4px;">{label}</span>
+                    <span style="color:#a8a8b3;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-top:4px;text-align:center;line-height:1.4;">{label}</span>
                 </div>'''
 
             # Compute 7d and 30d performance scores per player
@@ -762,8 +762,8 @@ with fn_tab:
                 window_label = time_window.upper()
 
                 s7, s30 = perf_scores.get(name, (None, None))
-                circle_7d = score_circle_html(s7, "7D Dub Score")
-                circle_30d = score_circle_html(s30, "30D Dub Score")
+                circle_7d = score_circle_html(s7, "7-Day<br>Dub Score")
+                circle_30d = score_circle_html(s30, "30-Day<br>Dub Score")
 
                 fn_cards_html.append(f"""
                 <div class="battle-card">
