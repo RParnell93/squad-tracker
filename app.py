@@ -871,19 +871,13 @@ with fn_tab:
             else:
                 st.caption("No per-input stats available (most players only show combined).")
 
-            # K/D Trend (weekly segments over 30 days)
+            # K/D Trend (weekly segments over 12 weeks)
             if epic_ids:
                 st.markdown("---")
-                st.markdown("## K/D Trend (Past 30 Days)")
+                st.markdown("## K/D Trend (Past 12 Weeks)")
                 st.caption("Weekly K/D calculated from Epic stats proxy. Each point shows K/D for that week only.")
 
-                # Define weekly windows: 0-7, 7-14, 14-21, 21-30 days ago
-                windows = [
-                    ("This Week", 0, 7),
-                    ("1 Week Ago", 7, 14),
-                    ("2 Weeks Ago", 14, 21),
-                    ("3-4 Weeks Ago", 21, 30),
-                ]
+                windows = [(f"Wk {i+1}" if i > 0 else "This Week", i * 7, (i + 1) * 7) for i in range(12)]
                 now = int(time.time())
 
                 # Fetch all needed windows
