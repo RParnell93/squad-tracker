@@ -3,3 +3,5 @@ squad.json
 __pycache__/
 *.pyc
 .DS_Store
+.epic_tokens.json
+.epic_device_auth.json

@@ -4,6 +4,10 @@ import json
 import os
 import time
 import plotly.graph_objects as go
+from epic_auth import (
+    load_tokens, get_valid_token, lookup_account_by_name,
+    stats_for_window, fetch_stats_epic, parse_raw_stats,
+)
 
 st.set_page_config(page_title="Squad Tracker", page_icon="🎮", layout="wide")
 
@@ -205,16 +209,107 @@ if "ow2_cache" not in st.session_state:
 
 # ── Fortnite API ─────────────────────────────────────────────────────────────
 def fetch_fortnite_stats(name, account_type, api_key):
-    resp = requests.get(
-        FORTNITE_API,
-        headers={"Authorization": api_key},
-        params={"name": name, "accountType": account_type},
-        timeout=15,
-    )
-    data = resp.json()
-    if data["status"] == 200:
-        return data["data"]
+    """Fetch both lifetime and season stats."""
+    result = {}
+    for window in ["lifetime", "season"]:
+        resp = requests.get(
+            FORTNITE_API,
+            headers={"Authorization": api_key},
+            params={"name": name, "accountType": account_type, "timeWindow": window},
+            timeout=15,
+        )
+        data = resp.json()
+        if data["status"] == 200:
+            result[window] = data["data"]
+        time.sleep(0.5)
+    if result.get("lifetime"):
+        # Merge: primary data is lifetime, attach season as extra key
+        merged = result["lifetime"]
+        if result.get("season"):
+            merged["season_stats"] = result["season"].get("stats", {})
+        return merged
     return None
+
+
+def epic_parsed_to_mode_stats(parsed):
+    """Convert Epic raw parsed stats into fortnite-api.com-style mode stats.
+
+    Groups playlists into solo/duo/squad/overall and sums across inputs.
+    Returns dict like: {"all": {"overall": {...}, "solo": {...}, ...}}
+    """
+    mode_map = {
+        "solo": ["defaultsolo", "nobuildbrsolo", "figmentsolo"],
+        "duo": ["defaultduo", "nobuildbrduos", "figmentduo"],
+        "squad": ["defaultsquad", "nobuildbrsquad", "sunflowernobuildsquad",
+                  "arseniccore_squads_maxfog", "punchberrynobuildsquad",
+                  "mash_squads_legacy"],
+    }
+
+    totals = {}  # mode -> {metric: value}
+    for mode in ["solo", "duo", "squad", "overall"]:
+        totals[mode] = {}
+
+    for input_type, playlists in parsed.items():
+        for playlist, metrics in playlists.items():
+            # Determine which mode this playlist belongs to
+            assigned = "overall"  # everything counts toward overall
+            for mode, keywords in mode_map.items():
+                if any(kw in playlist for kw in keywords):
+                    assigned = mode
+                    break
+
+            # Add to the assigned mode AND overall
+            for target in ([assigned, "overall"] if assigned != "overall" else ["overall"]):
+                for metric, val in metrics.items():
+                    if metric == "lastmodified":
+                        continue
+                    totals[target][metric] = totals[target].get(metric, 0) + val
+
+    # Convert to fortnite-api.com format
+    result = {"all": {}}
+    for mode, raw in totals.items():
+        matches = raw.get("matchesplayed", 0)
+        kills = raw.get("kills", 0)
+        wins = raw.get("placetop1", 0)
+        deaths = max(matches - wins, 0)
+        result["all"][mode] = {
+            "score": raw.get("score", 0),
+            "scorePerMin": raw.get("score", 0) / max(raw.get("minutesplayed", 1), 1),
+            "scorePerMatch": raw.get("score", 0) / max(matches, 1),
+            "wins": wins,
+            "top3": raw.get("placetop3", 0),
+            "top5": raw.get("placetop5", 0),
+            "top6": raw.get("placetop6", 0),
+            "top10": raw.get("placetop10", 0),
+            "top12": raw.get("placetop12", 0),
+            "top25": raw.get("placetop25", 0),
+            "kills": kills,
+            "killsPerMin": kills / max(raw.get("minutesplayed", 1), 1),
+            "killsPerMatch": kills / max(matches, 1),
+            "deaths": deaths,
+            "kd": kills / max(deaths, 1),
+            "matches": matches,
+            "winRate": wins / max(matches, 1) * 100,
+            "minutesPlayed": raw.get("minutesplayed", 0),
+            "playersOutlived": raw.get("playersoutlived", 0),
+        }
+    return result
+
+
+def fetch_epic_account_ids(fn_players):
+    """Look up Epic account IDs for all players. Returns {name: account_id}."""
+    token = get_valid_token()
+    if not token:
+        return {}
+    ids = {}
+    for p in fn_players:
+        # Use Epic display name from fortnite-api data if available
+        display = p.get("epic_name") or p["name"]
+        result = lookup_account_by_name(display, token)
+        if result:
+            ids[p["name"]] = result["id"]
+        time.sleep(0.2)
+    return ids
 
 
 # ── OW2 API ──────────────────────────────────────────────────────────────────
@@ -411,6 +506,8 @@ with fn_tab:
     else:
         if st.button("Refresh Stats"):
             st.session_state.fn_cache = {}
+            st.session_state.pop("epic_ids", None)
+            st.session_state.pop("epic_cache", None)
 
         all_fn = {}
         for p in fn_players:
@@ -426,56 +523,149 @@ with fn_tab:
                     else:
                         st.error(f"Could not find **{p['name']}** on {p.get('platform', p['type'])}.")
 
+        # Resolve Epic account IDs (needed for 7/30 day stats)
+        has_epic = bool(load_tokens())
+        if has_epic and "epic_ids" not in st.session_state:
+            with st.spinner("Resolving Epic account IDs..."):
+                epic_ids = {}
+                token = get_valid_token()
+                if token:
+                    for name, data in all_fn.items():
+                        display = data.get("account", {}).get("name", name)
+                        result = lookup_account_by_name(display, token)
+                        if result:
+                            epic_ids[name] = result["id"]
+                        time.sleep(0.2)
+                st.session_state.epic_ids = epic_ids
+        elif not has_epic:
+            st.session_state.epic_ids = {}
+
         if all_fn:
+            epic_ids = st.session_state.get("epic_ids", {})
+
+            # Helper to get stats for the selected time window
+            def get_stats(data, name, time_window):
+                if time_window == "Season" and data.get("season_stats"):
+                    return data["season_stats"]
+                if time_window in ("Last 7 Days", "Last 30 Days"):
+                    days = 7 if time_window == "Last 7 Days" else 30
+                    aid = epic_ids.get(name)
+                    if not aid:
+                        return None
+                    cache_key = f"epic_{aid}_{days}"
+                    if "epic_cache" not in st.session_state:
+                        st.session_state.epic_cache = {}
+                    if cache_key not in st.session_state.epic_cache:
+                        parsed = stats_for_window(aid, days=days)
+                        if parsed:
+                            st.session_state.epic_cache[cache_key] = epic_parsed_to_mode_stats(parsed)
+                        else:
+                            st.session_state.epic_cache[cache_key] = None
+                    return st.session_state.epic_cache[cache_key]
+                return data["stats"]
+
+            # Time window toggle
+            time_options = ["Lifetime", "Season"]
+            if epic_ids:
+                time_options += ["Last 7 Days", "Last 30 Days"]
+            time_window = st.radio("Time Window", time_options, horizontal=True, key="fn_time_window")
+
+            # Fetch Epic window stats if needed (batch all players)
+            if time_window in ("Last 7 Days", "Last 30 Days") and epic_ids:
+                days = 7 if time_window == "Last 7 Days" else 30
+                if "epic_cache" not in st.session_state:
+                    st.session_state.epic_cache = {}
+                missing = [n for n in all_fn if epic_ids.get(n) and f"epic_{epic_ids[n]}_{days}" not in st.session_state.epic_cache]
+                if missing:
+                    with st.spinner(f"Loading {time_window.lower()} stats..."):
+                        for name in missing:
+                            aid = epic_ids[name]
+                            parsed = stats_for_window(aid, days=days)
+                            cache_key = f"epic_{aid}_{days}"
+                            if parsed:
+                                st.session_state.epic_cache[cache_key] = epic_parsed_to_mode_stats(parsed)
+                            else:
+                                st.session_state.epic_cache[cache_key] = None
+                            time.sleep(0.3)
+
+            names = list(all_fn.keys())
+            display_names = [all_fn[n]["account"]["name"] for n in names]
+
+            # Get the right stats dict for each player
+            def player_mode(name, mode="overall"):
+                stats = get_stats(all_fn[name], name, time_window)
+                if not stats or "all" not in stats:
+                    return {}
+                if mode == "overall":
+                    return stats["all"].get("overall", {}) or {}
+                return stats["all"].get(mode, {}) or {}
+
             # Rankings
-            best_kd = max(d["stats"]["all"]["overall"].get("kd", 0) for d in all_fn.values())
-            best_wr = max(d["stats"]["all"]["overall"].get("winRate", 0) for d in all_fn.values())
-            best_kills = max(d["stats"]["all"]["overall"].get("kills", 0) for d in all_fn.values())
+            best_kd = max((player_mode(n).get("kd", 0) or 0) for n in names)
+            best_wr = max((player_mode(n).get("winRate", 0) or 0) for n in names)
+            best_kills = max((player_mode(n).get("kills", 0) or 0) for n in names)
+            best_kpm = max((player_mode(n).get("killsPerMatch", 0) or 0) for n in names)
 
             # Battle Cards
             st.markdown("## Battle Cards")
             fn_cards_html = []
             for idx, (name, data) in enumerate(all_fn.items()):
-                overall = data["stats"]["all"]["overall"]
+                overall = player_mode(name)
                 bp = data.get("battlePass", {})
                 platform = next((p["platform"] for p in fn_players if p["name"] == name), "")
 
-                kd = overall.get("kd", 0)
-                wr = overall.get("winRate", 0)
-                kills = overall.get("kills", 0)
-                wins = overall.get("wins", 0)
-                matches = overall.get("matches", 0)
-                kpm = overall.get("killsPerMatch", 0)
-                hours = round(overall.get("minutesPlayed", 0) / 60, 1)
-                outlived = overall.get("playersOutlived", 0)
-                last_on = overall.get("lastModified", "")[:10]
+                kd = overall.get("kd", 0) or 0
+                wr = overall.get("winRate", 0) or 0
+                kills = overall.get("kills", 0) or 0
+                wins = overall.get("wins", 0) or 0
+                deaths = overall.get("deaths", 0) or 0
+                matches = overall.get("matches", 0) or 0
+                kpm = overall.get("killsPerMatch", 0) or 0
+                score = overall.get("score", 0) or 0
+                spm = overall.get("scorePerMin", 0) or 0
+                spmatch = overall.get("scorePerMatch", 0) or 0
+                hours = round((overall.get("minutesPlayed", 0) or 0) / 60, 1)
+                outlived = overall.get("playersOutlived", 0) or 0
+                opm = round(outlived / max(matches, 1), 1)
+                top10 = overall.get("top10", 0) or 0
+                top25 = overall.get("top25", 0) or 0
+                last_on = (overall.get("lastModified", "") or "")[:10]
 
-                kd_badge = ' <span class="rank-badge">SQUAD BEST</span>' if kd == best_kd and len(all_fn) > 1 else ""
-                wr_badge = ' <span class="rank-badge">SQUAD BEST</span>' if wr == best_wr and len(all_fn) > 1 else ""
-                kills_badge = ' <span class="rank-badge">SQUAD BEST</span>' if kills == best_kills and len(all_fn) > 1 else ""
+                kd_badge = ' <span class="rank-badge">BEST</span>' if kd == best_kd and len(all_fn) > 1 and kd > 0 else ""
+                wr_badge = ' <span class="rank-badge">BEST</span>' if wr == best_wr and len(all_fn) > 1 and wr > 0 else ""
+                kills_badge = ' <span class="rank-badge">BEST</span>' if kills == best_kills and len(all_fn) > 1 and kills > 0 else ""
+                kpm_badge = ' <span class="rank-badge">BEST</span>' if kpm == best_kpm and len(all_fn) > 1 and kpm > 0 else ""
+
+                window_label = time_window.upper()
 
                 fn_cards_html.append(f"""
                 <div class="battle-card">
                     <div class="player-name">{data['account']['name']}</div>
-                    <div class="player-platform">{platform} | BP Level {bp.get('level', '?')}</div>
+                    <div class="player-platform">{platform} | BP Lv {bp.get('level', '?')} | {window_label}</div>
                     <div style="display: flex; justify-content: space-around; margin-bottom: 16px;">
                         <div class="big-stat"><div class="big-stat-value">{kd:.2f}</div><div class="big-stat-label">K/D</div></div>
                         <div class="big-stat"><div class="big-stat-value">{wr:.1f}%</div><div class="big-stat-label">Win Rate</div></div>
                         <div class="big-stat"><div class="big-stat-value">{wins:,}</div><div class="big-stat-label">Wins</div></div>
                     </div>
                     <div class="stat-row"><span class="stat-label">Total Kills</span><span class="stat-highlight">{kills:,}{kills_badge}</span></div>
-                    <div class="stat-row"><span class="stat-label">Kills / Match</span><span class="stat-value">{kpm:.2f}</span></div>
+                    <div class="stat-row"><span class="stat-label">Deaths</span><span class="stat-value">{deaths:,}</span></div>
                     <div class="stat-row"><span class="stat-label">K/D Ratio</span><span class="stat-highlight">{kd:.2f}{kd_badge}</span></div>
+                    <div class="stat-row"><span class="stat-label">Kills / Match</span><span class="stat-highlight">{kpm:.2f}{kpm_badge}</span></div>
                     <div class="stat-row"><span class="stat-label">Win Rate</span><span class="stat-highlight">{wr:.1f}%{wr_badge}</span></div>
                     <div class="stat-row"><span class="stat-label">Matches</span><span class="stat-value">{matches:,}</span></div>
+                    <div class="stat-row"><span class="stat-label">Score</span><span class="stat-value">{score:,}</span></div>
+                    <div class="stat-row"><span class="stat-label">Score / Min</span><span class="stat-value">{spm:.1f}</span></div>
+                    <div class="stat-row"><span class="stat-label">Score / Match</span><span class="stat-value">{spmatch:.1f}</span></div>
                     <div class="stat-row"><span class="stat-label">Players Outlived</span><span class="stat-value">{outlived:,}</span></div>
+                    <div class="stat-row"><span class="stat-label">Outlived / Match</span><span class="stat-value">{opm}</span></div>
+                    <div class="stat-row"><span class="stat-label">Top 10s</span><span class="stat-value">{top10:,}</span></div>
+                    <div class="stat-row"><span class="stat-label">Top 25s</span><span class="stat-value">{top25:,}</span></div>
                     <div class="stat-row"><span class="stat-label">Hours Played</span><span class="stat-value">{hours:,.1f}</span></div>
                     <div class="stat-row"><span class="stat-label">Last Active</span><span class="stat-value">{last_on}</span></div>
                 </div>""")
 
             # Render all cards in a scrollable row
             cards_joined = "".join(fn_cards_html)
-            num_cards = len(fn_cards_html)
             st.html(f"""
             <style>
                 .cards-scroll {{ display: flex; gap: 16px; overflow-x: auto; padding: 8px 0 16px 0; }}
@@ -483,14 +673,14 @@ with fn_tab:
                 .battle-card {{ background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); border-radius: 16px; padding: 20px; border: 2px solid #e94560; color: white; overflow: hidden; word-wrap: break-word; box-sizing: border-box; }}
                 .player-name {{ font-size: 1.1em; font-weight: 800; margin-bottom: 4px; color: #e94560; text-transform: uppercase; letter-spacing: 1px; }}
                 .player-platform {{ font-size: 0.8em; color: #a8a8b3; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 1px; }}
-                .stat-row {{ display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }}
-                .stat-label {{ color: #a8a8b3; font-size: 0.85em; white-space: nowrap; }}
-                .stat-value {{ color: white; font-weight: 700; font-size: 0.95em; white-space: nowrap; }}
-                .stat-highlight {{ color: #e94560; font-weight: 700; font-size: 0.95em; white-space: nowrap; }}
+                .stat-row {{ display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }}
+                .stat-label {{ color: #a8a8b3; font-size: 0.82em; white-space: nowrap; }}
+                .stat-value {{ color: white; font-weight: 700; font-size: 0.9em; white-space: nowrap; }}
+                .stat-highlight {{ color: #e94560; font-weight: 700; font-size: 0.9em; white-space: nowrap; }}
                 .big-stat {{ text-align: center; padding: 8px; }}
                 .big-stat-value {{ font-size: 1.8em; font-weight: 800; color: white; }}
                 .big-stat-label {{ font-size: 0.7em; color: #a8a8b3; text-transform: uppercase; letter-spacing: 1px; }}
-                .rank-badge {{ display: inline-block; background: #e94560; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.7em; font-weight: 700; margin-left: 4px; white-space: nowrap; }}
+                .rank-badge {{ display: inline-block; background: #e94560; color: white; padding: 2px 6px; border-radius: 12px; font-size: 0.65em; font-weight: 700; margin-left: 4px; white-space: nowrap; }}
             </style>
             <div class="cards-scroll">{cards_joined}</div>
             """)
@@ -498,31 +688,50 @@ with fn_tab:
             # Charts
             st.markdown("---")
             st.markdown("## Squad Comparison")
-            names = list(all_fn.keys())
-            display_names = [all_fn[n]["account"]["name"] for n in names]
 
             c1, c2 = st.columns(2)
             with c1:
-                kds = [all_fn[n]["stats"]["all"]["overall"].get("kd", 0) for n in names]
+                kds = [player_mode(n).get("kd", 0) or 0 for n in names]
                 colors = ["#e94560" if v == max(kds) else "#16213e" for v in kds]
                 fig = go.Figure(go.Bar(x=display_names, y=kds, marker_color=colors, text=[f"{v:.2f}" for v in kds], textposition="outside"))
                 fig.update_layout(title="K/D Ratio", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="K/D", height=400, font=dict(color="white"))
                 st.plotly_chart(fig, use_container_width=True)
             with c2:
-                wrs = [all_fn[n]["stats"]["all"]["overall"].get("winRate", 0) for n in names]
+                wrs = [player_mode(n).get("winRate", 0) or 0 for n in names]
                 colors = ["#e94560" if v == max(wrs) else "#16213e" for v in wrs]
                 fig = go.Figure(go.Bar(x=display_names, y=wrs, marker_color=colors, text=[f"{v:.1f}%" for v in wrs], textposition="outside"))
                 fig.update_layout(title="Win Rate", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Win %", height=400, font=dict(color="white"))
                 st.plotly_chart(fig, use_container_width=True)
 
+            c3, c4 = st.columns(2)
+            with c3:
+                kpms = [player_mode(n).get("killsPerMatch", 0) or 0 for n in names]
+                colors = ["#e94560" if v == max(kpms) else "#16213e" for v in kpms]
+                fig = go.Figure(go.Bar(x=display_names, y=kpms, marker_color=colors, text=[f"{v:.2f}" for v in kpms], textposition="outside"))
+                fig.update_layout(title="Kills / Match", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Kills", height=400, font=dict(color="white"))
+                st.plotly_chart(fig, use_container_width=True)
+            with c4:
+                spms = [player_mode(n).get("scorePerMatch", 0) or 0 for n in names]
+                colors = ["#e94560" if v == max(spms) else "#16213e" for v in spms]
+                fig = go.Figure(go.Bar(x=display_names, y=spms, marker_color=colors, text=[f"{v:.0f}" for v in spms], textposition="outside"))
+                fig.update_layout(title="Score / Match", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Score", height=400, font=dict(color="white"))
+                st.plotly_chart(fig, use_container_width=True)
+
             # Radar - normalize each stat to 0-100 across squad
             st.markdown("### Skill Radar")
-            categories = ["K/D", "Win%", "Kills/Match", "Score/Min", "Outlived/Match"]
+            categories = ["K/D", "Win%", "Kills/Match", "Score/Min", "Outlived/Match", "Score/Match"]
             raw_data = {}
             for name in names:
-                o = all_fn[name]["stats"]["all"]["overall"]
-                m = max(o.get("matches", 1), 1)
-                raw_data[name] = [o.get("kd", 0), o.get("winRate", 0), o.get("killsPerMatch", 0), o.get("scorePerMin", 0), o.get("playersOutlived", 0) / m]
+                o = player_mode(name)
+                m = max(o.get("matches", 1) or 1, 1)
+                raw_data[name] = [
+                    o.get("kd", 0) or 0,
+                    o.get("winRate", 0) or 0,
+                    o.get("killsPerMatch", 0) or 0,
+                    o.get("scorePerMin", 0) or 0,
+                    (o.get("playersOutlived", 0) or 0) / m,
+                    o.get("scorePerMatch", 0) or 0,
+                ]
 
             fig = go.Figure()
             for name in names:
@@ -542,25 +751,67 @@ with fn_tab:
                               template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=500, font=dict(color="white"))
             st.plotly_chart(fig, use_container_width=True)
 
-            # Mode table
+            # Mode Breakdown
             st.markdown("---")
             st.markdown("## Mode Breakdown")
             mode_tab_sel = st.selectbox("Select Mode", ["Overall", "Solo", "Duo", "Squad", "LTM"], key="fn_mode")
             mk = mode_tab_sel.lower()
             table_data = []
             for name in names:
-                s = all_fn[name]["stats"]["all"]["overall"] if mk == "overall" else all_fn[name]["stats"]["all"].get(mk, {})
+                s = player_mode(name, mk)
                 if not s:
                     continue
+                m = max(s.get("matches", 0) or 0, 1)
                 table_data.append({
                     "Player": all_fn[name]["account"]["name"],
-                    "Matches": f"{s.get('matches', 0):,}", "Wins": f"{s.get('wins', 0):,}",
-                    "Win%": f"{s.get('winRate', 0):.1f}%", "K/D": f"{s.get('kd', 0):.2f}",
-                    "Kills": f"{s.get('kills', 0):,}", "K/Match": f"{s.get('killsPerMatch', 0):.2f}",
-                    "Hours": f"{round(s.get('minutesPlayed', 0) / 60, 1):,.1f}",
+                    "Matches": f"{s.get('matches', 0) or 0:,}",
+                    "Wins": f"{s.get('wins', 0) or 0:,}",
+                    "Win%": f"{s.get('winRate', 0) or 0:.1f}%",
+                    "K/D": f"{s.get('kd', 0) or 0:.2f}",
+                    "Kills": f"{s.get('kills', 0) or 0:,}",
+                    "Deaths": f"{s.get('deaths', 0) or 0:,}",
+                    "K/Match": f"{s.get('killsPerMatch', 0) or 0:.2f}",
+                    "Score": f"{s.get('score', 0) or 0:,}",
+                    "Score/Match": f"{s.get('scorePerMatch', 0) or 0:.0f}",
+                    "Score/Min": f"{s.get('scorePerMin', 0) or 0:.1f}",
+                    "Outlived": f"{s.get('playersOutlived', 0) or 0:,}",
+                    "Outlived/Match": f"{(s.get('playersOutlived', 0) or 0) / m:.1f}",
+                    "Top 10": f"{s.get('top10', 0) or 0:,}",
+                    "Top 25": f"{s.get('top25', 0) or 0:,}",
+                    "Hours": f"{round((s.get('minutesPlayed', 0) or 0) / 60, 1):,.1f}",
                 })
             if table_data:
                 st.dataframe(table_data, use_container_width=True, hide_index=True)
+
+            # Input type breakdown
+            st.markdown("---")
+            st.markdown("## Input Breakdown")
+            input_data = []
+            for name in names:
+                stats = get_stats(all_fn[name], name, time_window)
+                if not stats:
+                    continue
+                for input_type, label in [("keyboardMouse", "KB/Mouse"), ("gamepad", "Gamepad"), ("touch", "Touch")]:
+                    s = stats.get(input_type, {})
+                    if not s:
+                        continue
+                    o = s.get("overall", {})
+                    if not o or not o.get("matches"):
+                        continue
+                    input_data.append({
+                        "Player": all_fn[name]["account"]["name"],
+                        "Input": label,
+                        "Matches": f"{o.get('matches', 0):,}",
+                        "Wins": f"{o.get('wins', 0):,}",
+                        "Win%": f"{o.get('winRate', 0) or 0:.1f}%",
+                        "K/D": f"{o.get('kd', 0) or 0:.2f}",
+                        "Kills": f"{o.get('kills', 0):,}",
+                        "K/Match": f"{o.get('killsPerMatch', 0) or 0:.2f}",
+                    })
+            if input_data:
+                st.dataframe(input_data, use_container_width=True, hide_index=True)
+            else:
+                st.caption("No per-input stats available (most players only show combined).")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
