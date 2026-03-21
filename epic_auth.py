@@ -116,11 +116,19 @@ def create_device_auth(access_token, account_id):
 
 
 def load_device_auth():
-    """Load saved device auth credentials."""
-    if not os.path.exists(DEVICE_AUTH_FILE):
-        return None
-    with open(DEVICE_AUTH_FILE) as f:
-        return json.load(f)
+    """Load saved device auth credentials (local file or Streamlit secrets)."""
+    if os.path.exists(DEVICE_AUTH_FILE):
+        with open(DEVICE_AUTH_FILE) as f:
+            return json.load(f)
+    # Fall back to Streamlit secrets
+    try:
+        import streamlit as st
+        da = st.secrets.get("epic_device_auth")
+        if da:
+            return dict(da)
+    except Exception:
+        pass
+    return None
 
 
 def token_from_device_auth(device_data=None):
