@@ -258,6 +258,33 @@ if game_tab == "Fortnite":
     st.sidebar.markdown("---")
     st.sidebar.subheader("Add Fortnite Player")
     platform_map = {"Xbox": "xbl", "PlayStation": "psn", "Epic (PC)": "epic"}
+
+    # Quick-add presets
+    preset_players = [
+        {"name": "astros44", "type": "xbl", "platform": "Xbox"},
+        {"name": "zippomanjingles", "type": "psn", "platform": "PlayStation"},
+        {"name": "crazy in basye", "type": "xbl", "platform": "Xbox"},
+        {"name": "i7vosunz458", "type": "xbl", "platform": "Xbox"},
+        {"name": "callmepot", "type": "epic", "platform": "Epic (PC)"},
+    ]
+    current_names = {p["name"] for p in st.session_state.squad.get("fortnite_players", [])}
+    available_presets = [p for p in preset_players if p["name"] not in current_names]
+
+    if available_presets:
+        preset_names = ["-- Select a friend --"] + [f"{p['name']} ({p['platform']})" for p in available_presets]
+        preset_choice = st.sidebar.selectbox("Quick Add", preset_names, key="fn_preset")
+        if st.sidebar.button("Add Selected", key="fn_preset_add", use_container_width=True):
+            idx = preset_names.index(preset_choice) - 1
+            if idx >= 0:
+                st.session_state.squad["fortnite_players"].append(available_presets[idx])
+                save_squad(st.session_state.squad)
+                st.rerun()
+        if st.sidebar.button("Add All Friends", key="fn_preset_all", use_container_width=True):
+            st.session_state.squad["fortnite_players"].extend(available_presets)
+            save_squad(st.session_state.squad)
+            st.rerun()
+
+    st.sidebar.caption("Or add manually:")
     col1, col2 = st.sidebar.columns([2, 1])
     new_name = col1.text_input("Gamertag / Epic Name", key="fn_new_name")
     new_platform = col2.selectbox("Platform", list(platform_map.keys()), key="fn_platform")
@@ -288,7 +315,36 @@ if game_tab == "Fortnite":
 else:  # OW2
     st.sidebar.markdown("---")
     st.sidebar.subheader("Add OW2 Player")
-    st.sidebar.caption("Use the display name (not BattleTag). Profile must be public.")
+
+    ow2_preset_players = [
+        {"name": "bigdumpy", "player_id": "f057ab8ea67c8bb4a4a126a7d603%7C4e6a5ab09612cbe141cc5cca93318eab"},
+        {"name": "meowforheals", "player_id": "ff5ba39db57e89a5ecf17be3c903a40a4a%7C675748059c6913c6fafb628a567232f0"},
+        {"name": "classic", "player_id": "f152ad99a07898e0baa120a7d4%7C156e54723040e35b417b08d93b151741"},
+        {"name": "batzz0"},
+        {"name": "gascan"},
+        {"name": "greybeast"},
+        {"name": "jbone"},
+        {"name": "Paulpummeler"},
+        {"name": "i7vosunz458"},
+    ]
+    ow2_current = {p["name"] for p in st.session_state.squad.get("ow2_players", [])}
+    ow2_available = [p for p in ow2_preset_players if p["name"] not in ow2_current]
+
+    if ow2_available:
+        ow2_preset_names = ["-- Select a friend --"] + [p["name"] for p in ow2_available]
+        ow2_choice = st.sidebar.selectbox("Quick Add", ow2_preset_names, key="ow2_preset")
+        if st.sidebar.button("Add Selected", key="ow2_preset_add", use_container_width=True):
+            ow2_idx = ow2_preset_names.index(ow2_choice) - 1
+            if ow2_idx >= 0:
+                st.session_state.squad["ow2_players"].append(ow2_available[ow2_idx])
+                save_squad(st.session_state.squad)
+                st.rerun()
+        if st.sidebar.button("Add All Friends", key="ow2_preset_all", use_container_width=True):
+            st.session_state.squad["ow2_players"].extend(ow2_available)
+            save_squad(st.session_state.squad)
+            st.rerun()
+
+    st.sidebar.caption("Or add manually (display name, profile must be public):")
     new_ow2 = st.sidebar.text_input("Display Name", key="ow2_new_name")
 
     if st.sidebar.button("Add Player", key="ow2_add", use_container_width=True):
