@@ -241,8 +241,8 @@ if game_tab == "Fortnite":
     has_secret = False
     try:
         has_secret = bool(st.secrets["FORTNITE_API_KEY"])
-    except Exception:
-        pass
+    except Exception as e:
+        st.sidebar.caption(f"Secrets status: {type(e).__name__}")
 
     if has_secret:
         st.sidebar.success("API key loaded from secrets")
