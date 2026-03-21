@@ -545,6 +545,13 @@ with fn_tab:
             def get_stats(data, name, time_window):
                 if time_window == "Season" and data.get("season_stats"):
                     return data["season_stats"]
+                if time_window in ("Today", "Yesterday"):
+                    aid = epic_ids.get(name)
+                    if not aid:
+                        return None
+                    day_key = time_window.lower()
+                    cache_key = f"epic_{aid}_{day_key}"
+                    return st.session_state.get("epic_cache", {}).get(cache_key)
                 if time_window in ("Last 7 Days", "Last 30 Days"):
                     days = 7 if time_window == "Last 7 Days" else 30
                     aid = epic_ids.get(name)
@@ -565,7 +572,7 @@ with fn_tab:
             # Time window toggle
             time_options = ["Lifetime", "Season"]
             if epic_ids:
-                time_options += ["Last 7 Days", "Last 30 Days", "Custom Range"]
+                time_options += ["Today", "Yesterday", "Last 7 Days", "Last 30 Days", "Custom Range"]
             time_window = st.radio("Time Window", time_options, horizontal=True, key="fn_time_window")
 
             custom_days = None
@@ -582,6 +589,29 @@ with fn_tab:
             # Fetch Epic window stats if needed (batch all players)
             if "epic_cache" not in st.session_state:
                 st.session_state.epic_cache = {}
+
+            if time_window in ("Today", "Yesterday") and epic_ids:
+                if time_window == "Today":
+                    day_start = datetime.combine(date.today(), datetime.min.time())
+                    day_end = datetime.combine(date.today(), datetime.max.time())
+                else:
+                    day_start = datetime.combine(date.today() - timedelta(days=1), datetime.min.time())
+                    day_end = datetime.combine(date.today() - timedelta(days=1), datetime.max.time())
+                day_start_ts = int(day_start.timestamp())
+                day_end_ts = int(day_end.timestamp())
+                day_key = time_window.lower()
+                missing = [n for n in all_fn if epic_ids.get(n) and f"epic_{epic_ids[n]}_{day_key}" not in st.session_state.epic_cache]
+                if missing:
+                    with st.spinner(f"Loading {time_window.lower()}'s stats..."):
+                        for name in missing:
+                            aid = epic_ids[name]
+                            raw = fetch_stats_epic(aid, day_start_ts, day_end_ts)
+                            cache_key = f"epic_{aid}_{day_key}"
+                            if raw:
+                                st.session_state.epic_cache[cache_key] = epic_parsed_to_mode_stats(parse_raw_stats(raw))
+                            else:
+                                st.session_state.epic_cache[cache_key] = None
+                            time.sleep(0.3)
 
             if time_window in ("Last 7 Days", "Last 30 Days") and epic_ids:
                 days = 7 if time_window == "Last 7 Days" else 30
@@ -840,6 +870,121 @@ with fn_tab:
                 st.dataframe(input_data, use_container_width=True, hide_index=True)
             else:
                 st.caption("No per-input stats available (most players only show combined).")
+
+            # K/D Trend (weekly segments over 30 days)
+            if epic_ids:
+                st.markdown("---")
+                st.markdown("## K/D Trend (Past 30 Days)")
+                st.caption("Weekly K/D calculated from Epic stats proxy. Each point shows K/D for that week only.")
+
+                # Define weekly windows: 0-7, 7-14, 14-21, 21-30 days ago
+                windows = [
+                    ("This Week", 0, 7),
+                    ("1 Week Ago", 7, 14),
+                    ("2 Weeks Ago", 14, 21),
+                    ("3-4 Weeks Ago", 21, 30),
+                ]
+                now = int(time.time())
+
+                # Fetch all needed windows
+                if "trend_cache" not in st.session_state:
+                    st.session_state.trend_cache = {}
+
+                trend_missing = False
+                for name in names:
+                    aid = epic_ids.get(name)
+                    if not aid:
+                        continue
+                    for label, d_start, d_end in windows:
+                        ck = f"trend_{aid}_{d_start}_{d_end}"
+                        if ck not in st.session_state.trend_cache:
+                            trend_missing = True
+                            break
+
+                if trend_missing:
+                    with st.spinner("Loading K/D trend data..."):
+                        for name in names:
+                            aid = epic_ids.get(name)
+                            if not aid:
+                                continue
+                            for label, d_start, d_end in windows:
+                                ck = f"trend_{aid}_{d_start}_{d_end}"
+                                if ck in st.session_state.trend_cache:
+                                    continue
+                                start_ts = now - (d_end * 86400)
+                                end_ts = now - (d_start * 86400)
+                                raw = fetch_stats_epic(aid, start_ts, end_ts)
+                                if raw:
+                                    parsed = parse_raw_stats(raw)
+                                    mode_stats = epic_parsed_to_mode_stats(parsed)
+                                    o = mode_stats.get("all", {}).get("overall", {})
+                                    st.session_state.trend_cache[ck] = {
+                                        "kd": o.get("kd", 0),
+                                        "kills": o.get("kills", 0),
+                                        "matches": o.get("matches", 0),
+                                        "winRate": o.get("winRate", 0),
+                                    }
+                                else:
+                                    st.session_state.trend_cache[ck] = None
+                                time.sleep(0.3)
+
+                # Build the chart
+                fig = go.Figure()
+                x_labels = [w[0] for w in reversed(windows)]
+                for name in names:
+                    aid = epic_ids.get(name)
+                    if not aid:
+                        continue
+                    y_vals = []
+                    for label, d_start, d_end in reversed(windows):
+                        ck = f"trend_{aid}_{d_start}_{d_end}"
+                        cached = st.session_state.trend_cache.get(ck)
+                        if cached and cached.get("matches", 0) > 0:
+                            y_vals.append(round(cached["kd"], 2))
+                        else:
+                            y_vals.append(None)
+                    fig.add_trace(go.Scatter(
+                        x=x_labels, y=y_vals, mode="lines+markers",
+                        name=all_fn[name]["account"]["name"],
+                        line=dict(width=3), marker=dict(size=10),
+                    ))
+                fig.update_layout(
+                    template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)", height=450,
+                    yaxis_title="K/D Ratio", font=dict(color="white"),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+            # Data Definitions
+            st.markdown("---")
+            with st.expander("Data Definitions"):
+                st.markdown("""
+| Stat | Definition |
+|------|-----------|
+| **K/D** | Kill/Death ratio. Kills divided by deaths (deaths = matches minus wins). |
+| **Win Rate** | Percentage of matches won. |
+| **Kills/Match** | Average kills per match played. |
+| **Score** | Epic's composite score combining kills, placement, survival, and assists. |
+| **Score/Min** | Score earned per minute of playtime. Measures efficiency. |
+| **Score/Match** | Average score per match. |
+| **Players Outlived** | Total players eliminated before you in each match. Higher = better survival. |
+| **Outlived/Match** | Average players outlived per match. Proxy for how deep you go in games. |
+| **Top 10 / Top 25** | Number of matches finishing in the top 10 or top 25. |
+| **Deaths** | Estimated as matches played minus wins (each match ends in either a win or a death). |
+| **Hours Played** | Total minutes played divided by 60. |
+| **BP Level** | Current Battle Pass level for the season. |
+
+**Time Windows:**
+| Window | Source | Notes |
+|--------|--------|-------|
+| **Lifetime** | fortnite-api.com | All-time career stats. |
+| **Season** | fortnite-api.com | Current season only. |
+| **Last 7 / 30 Days** | Epic Stats Proxy | Custom time window via Epic OAuth. Requires device auth. |
+| **Custom Range** | Epic Stats Proxy | Pick any start/end date. Same source as 7/30 day. |
+
+**Input Types:** KB/Mouse, Gamepad (controller), Touch (mobile). Stats are tracked separately by Epic per input device.
+""")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -1122,3 +1267,25 @@ with ow2_tab:
                     st.plotly_chart(fig, use_container_width=True)
             else:
                 st.caption("No hero data available for this player.")
+
+            # OW2 Data Definitions
+            st.markdown("---")
+            with st.expander("Data Definitions"):
+                st.markdown("""
+| Stat | Definition |
+|------|-----------|
+| **KDA** | (Eliminations + Assists) / Deaths. Measures overall combat contribution. |
+| **Win Rate** | Percentage of games won. |
+| **Eliminations** | Final blows + assists that result in a kill. |
+| **Assists** | Contributions to a kill without landing the final blow. |
+| **Deaths** | Number of times you died. |
+| **Damage** | Total damage dealt to enemies. |
+| **Healing** | Total healing done to teammates (and self for some heroes). |
+| **Endorsement** | Community rating (1-5) based on sportsmanship, shotcalling, and teamwork. |
+
+**Roles:** Tank (frontline, space creation), Damage (eliminations), Support (healing/utility). Stats are tracked per role.
+
+**Hero Breakdown:** Per-hero stats across all games played. Sorted by games played.
+
+**Note:** OW2 stats are career totals only. Blizzard does not provide time-windowed stats through any public API.
+""")
