@@ -583,6 +583,22 @@ with fn_tab:
             if "epic_cache" not in st.session_state:
                 st.session_state.epic_cache = {}
 
+            # Always fetch 7d and 30d stats for performance score circles
+            if epic_ids:
+                for score_days in (7, 30):
+                    missing = [n for n in all_fn if epic_ids.get(n) and f"epic_{epic_ids[n]}_{score_days}" not in st.session_state.epic_cache]
+                    if missing:
+                        with st.spinner(f"Loading {score_days}-day stats..."):
+                            for name in missing:
+                                aid = epic_ids[name]
+                                parsed = stats_for_window(aid, days=score_days)
+                                cache_key = f"epic_{aid}_{score_days}"
+                                if parsed:
+                                    st.session_state.epic_cache[cache_key] = epic_parsed_to_mode_stats(parsed)
+                                else:
+                                    st.session_state.epic_cache[cache_key] = None
+                                time.sleep(0.3)
+
             if time_window in ("Last 7 Days", "Last 30 Days") and epic_ids:
                 days = 7 if time_window == "Last 7 Days" else 30
                 missing = [n for n in all_fn if epic_ids.get(n) and f"epic_{epic_ids[n]}_{days}" not in st.session_state.epic_cache]
@@ -634,6 +650,89 @@ with fn_tab:
             best_kills = max((player_mode(n).get("kills", 0) or 0) for n in names)
             best_kpm = max((player_mode(n).get("killsPerMatch", 0) or 0) for n in names)
 
+            # Performance Score: composite 0-100 from K/D, Win Rate, Kills/Match percentiles
+            SCORE_CURVES = {
+                "kd": [
+                    (0, 0), (0.5, 15), (0.8, 30), (1.0, 50), (1.3, 65),
+                    (1.5, 72), (2.0, 85), (2.5, 90), (3.0, 95), (4.0, 98), (6.0, 100),
+                ],
+                "winRate": [
+                    (0, 0), (1, 15), (2, 25), (3, 35), (5, 50), (7, 60),
+                    (10, 72), (15, 82), (20, 90), (30, 95), (50, 99), (100, 100),
+                ],
+                "killsPerMatch": [
+                    (0, 0), (0.5, 15), (1.0, 30), (1.5, 45), (2.0, 58),
+                    (2.5, 68), (3.0, 78), (4.0, 88), (5.0, 93), (7.0, 98), (10.0, 100),
+                ],
+            }
+
+            def _interp(value, curve):
+                if value <= curve[0][0]:
+                    return curve[0][1]
+                if value >= curve[-1][0]:
+                    return curve[-1][1]
+                for i in range(len(curve) - 1):
+                    v0, p0 = curve[i]
+                    v1, p1 = curve[i + 1]
+                    if v0 <= value <= v1:
+                        t = (value - v0) / (v1 - v0)
+                        return p0 + t * (p1 - p0)
+                return 50
+
+            def perf_score(stats_dict):
+                """Weighted composite: 40% K/D + 30% Win Rate + 30% Kills/Match."""
+                if not stats_dict:
+                    return None
+                o = stats_dict.get("all", {}).get("overall", {})
+                if not o or not o.get("matches", 0):
+                    return None
+                kd_pct = _interp(o.get("kd", 0) or 0, SCORE_CURVES["kd"])
+                wr_pct = _interp(o.get("winRate", 0) or 0, SCORE_CURVES["winRate"])
+                kpm_pct = _interp(o.get("killsPerMatch", 0) or 0, SCORE_CURVES["killsPerMatch"])
+                return round(0.4 * kd_pct + 0.3 * wr_pct + 0.3 * kpm_pct)
+
+            def score_color(s):
+                if s is None:
+                    return "#444"
+                if s >= 75:
+                    return "#00c853"  # green
+                if s >= 50:
+                    return "#ffc107"  # yellow
+                return "#ef5350"  # red
+
+            def score_circle_svg(score, label, size=80):
+                """SVG donut circle like WHOOP recovery scores."""
+                if score is None:
+                    score_text = "--"
+                    pct = 0
+                else:
+                    score_text = str(score)
+                    pct = score / 100
+                color = score_color(score)
+                r = 34
+                circ = 2 * 3.14159 * r
+                dash = circ * pct
+                gap = circ - dash
+                return f'''<svg width="{size}" height="{size}" viewBox="0 0 {size} {size}">
+                    <circle cx="{size//2}" cy="{size//2}" r="{r}" fill="none" stroke="#1a1a2e" stroke-width="6"/>
+                    <circle cx="{size//2}" cy="{size//2}" r="{r}" fill="none" stroke="{color}" stroke-width="6"
+                        stroke-dasharray="{dash:.1f} {gap:.1f}" stroke-linecap="round"
+                        transform="rotate(-90 {size//2} {size//2})"/>
+                    <text x="{size//2}" y="{size//2 - 4}" text-anchor="middle" fill="white" font-size="18" font-weight="800">{score_text}</text>
+                    <text x="{size//2}" y="{size//2 + 12}" text-anchor="middle" fill="#a8a8b3" font-size="8" font-weight="600">{label}</text>
+                </svg>'''
+
+            # Compute 7d and 30d performance scores per player
+            perf_scores = {}
+            for name in all_fn:
+                aid = epic_ids.get(name)
+                if aid:
+                    s7 = st.session_state.get("epic_cache", {}).get(f"epic_{aid}_7")
+                    s30 = st.session_state.get("epic_cache", {}).get(f"epic_{aid}_30")
+                    perf_scores[name] = (perf_score(s7), perf_score(s30))
+                else:
+                    perf_scores[name] = (None, None)
+
             # Battle Cards
             st.markdown("## Battle Cards")
             fn_cards_html = []
@@ -666,10 +765,17 @@ with fn_tab:
 
                 window_label = time_window.upper()
 
+                s7, s30 = perf_scores.get(name, (None, None))
+                circle_7d = score_circle_svg(s7, "7 DAY")
+                circle_30d = score_circle_svg(s30, "30 DAY")
+
                 fn_cards_html.append(f"""
                 <div class="battle-card">
                     <div class="player-name">{data['account']['name']}</div>
                     <div class="player-platform">{platform} | BP Lv {bp.get('level', '?')} | {window_label}</div>
+                    <div style="display: flex; justify-content: center; gap: 16px; margin-bottom: 12px;">
+                        {circle_7d}{circle_30d}
+                    </div>
                     <div style="display: flex; justify-content: space-around; margin-bottom: 16px;">
                         <div class="big-stat"><div class="big-stat-value">{kd:.2f}</div><div class="big-stat-label">K/D</div></div>
                         <div class="big-stat"><div class="big-stat-value">{wr:.1f}%</div><div class="big-stat-label">Win Rate</div></div>
