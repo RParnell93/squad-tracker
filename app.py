@@ -760,10 +760,12 @@ with fn_tab:
                         "Hours Played": {"key": "minutesPlayed", "fmt": lambda v: round(v / 60, 1), "axis": "Hours Played"},
                     }
 
-                    selected_metric = st.selectbox(
-                        "Trend Metric", list(TREND_METRICS.keys()), index=0,
-                        key="trend_metric_select"
-                    )
+                    col_metric, _ = st.columns([1, 3])
+                    with col_metric:
+                        selected_metric = st.selectbox(
+                            "Trend Metric", list(TREND_METRICS.keys()), index=0,
+                            key="trend_metric_select"
+                        )
                     metric_info = TREND_METRICS[selected_metric]
 
                     st.markdown(f"## {selected_metric} Trend (Past 12 Weeks)")
