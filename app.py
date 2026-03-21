@@ -163,8 +163,8 @@ DEFAULT_FORTNITE_PLAYERS = [
     {"name": "i7vosunz458", "type": "xbl", "platform": "Xbox"},
     {"name": "callmepot", "type": "epic", "platform": "Epic (PC)"},
     {"name": "Jbone", "type": "epic", "platform": "Epic (PC)"},
-    {"name": "classic", "type": "epic", "platform": "Epic (PC)"},
     {"name": "hailedcanvas141", "type": "xbl", "platform": "Xbox"},
+    {"name": "mrfox733", "type": "xbl", "platform": "Xbox"},
 ]
 
 DEFAULT_OW2_PLAYERS = [
