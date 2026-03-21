@@ -791,8 +791,8 @@ with fn_tab:
                     <div class="stat-row"><span class="stat-label">Score / Match</span><span class="stat-value">{spmatch:.1f}</span></div>
                     <div class="stat-row"><span class="stat-label">Players Outlived</span><span class="stat-value">{outlived:,}</span></div>
                     <div class="stat-row"><span class="stat-label">Outlived / Match</span><span class="stat-value">{opm}</span></div>
-                    <div class="stat-row"><span class="stat-label">Top 10s</span><span class="stat-value">{top10:,}</span></div>
-                    <div class="stat-row"><span class="stat-label">Top 25s</span><span class="stat-value">{top25:,}</span></div>
+                    <div class="stat-row"><span class="stat-label">Top 10s</span><span class="stat-value">{top10:,} ({top10 / max(matches, 1) * 100:.1f}%)</span></div>
+                    <div class="stat-row"><span class="stat-label">Top 25s</span><span class="stat-value">{top25:,} ({top25 / max(matches, 1) * 100:.1f}%)</span></div>
                     <div class="stat-row"><span class="stat-label">Hours Played</span><span class="stat-value">{hours:,.1f}</span></div>
                     <div class="stat-row"><span class="stat-label">Last Active</span><span class="stat-value">{last_on}</span></div>
                 </div>""")
