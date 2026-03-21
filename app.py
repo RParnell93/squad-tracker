@@ -545,13 +545,6 @@ with fn_tab:
             def get_stats(data, name, time_window):
                 if time_window == "Season" and data.get("season_stats"):
                     return data["season_stats"]
-                if time_window in ("Today", "Yesterday"):
-                    aid = epic_ids.get(name)
-                    if not aid:
-                        return None
-                    day_key = time_window.lower()
-                    cache_key = f"epic_{aid}_{day_key}"
-                    return st.session_state.get("epic_cache", {}).get(cache_key)
                 if time_window in ("Last 7 Days", "Last 30 Days"):
                     days = 7 if time_window == "Last 7 Days" else 30
                     aid = epic_ids.get(name)
@@ -572,7 +565,7 @@ with fn_tab:
             # Time window toggle
             time_options = ["Lifetime", "Season"]
             if epic_ids:
-                time_options += ["Today", "Yesterday", "Last 7 Days", "Last 30 Days", "Custom Range"]
+                time_options += ["Last 7 Days", "Last 30 Days", "Custom Range"]
             time_window = st.radio("Time Window", time_options, horizontal=True, key="fn_time_window")
 
             custom_days = None
@@ -589,29 +582,6 @@ with fn_tab:
             # Fetch Epic window stats if needed (batch all players)
             if "epic_cache" not in st.session_state:
                 st.session_state.epic_cache = {}
-
-            if time_window in ("Today", "Yesterday") and epic_ids:
-                if time_window == "Today":
-                    day_start = datetime.combine(date.today(), datetime.min.time())
-                    day_end = datetime.combine(date.today(), datetime.max.time())
-                else:
-                    day_start = datetime.combine(date.today() - timedelta(days=1), datetime.min.time())
-                    day_end = datetime.combine(date.today() - timedelta(days=1), datetime.max.time())
-                day_start_ts = int(day_start.timestamp())
-                day_end_ts = int(day_end.timestamp())
-                day_key = time_window.lower()
-                missing = [n for n in all_fn if epic_ids.get(n) and f"epic_{epic_ids[n]}_{day_key}" not in st.session_state.epic_cache]
-                if missing:
-                    with st.spinner(f"Loading {time_window.lower()}'s stats..."):
-                        for name in missing:
-                            aid = epic_ids[name]
-                            raw = fetch_stats_epic(aid, day_start_ts, day_end_ts)
-                            cache_key = f"epic_{aid}_{day_key}"
-                            if raw:
-                                st.session_state.epic_cache[cache_key] = epic_parsed_to_mode_stats(parse_raw_stats(raw))
-                            else:
-                                st.session_state.epic_cache[cache_key] = None
-                            time.sleep(0.3)
 
             if time_window in ("Last 7 Days", "Last 30 Days") and epic_ids:
                 days = 7 if time_window == "Last 7 Days" else 30
@@ -1070,35 +1040,6 @@ with fn_tab:
             if table_data:
                 st.dataframe(table_data, use_container_width=True, hide_index=True)
 
-            # Input type breakdown
-            st.markdown("---")
-            st.markdown("## Input Breakdown")
-            input_data = []
-            for name in names:
-                stats = get_stats(all_fn[name], name, time_window)
-                if not stats:
-                    continue
-                for input_type, label in [("keyboardMouse", "KB/Mouse"), ("gamepad", "Gamepad"), ("touch", "Touch")]:
-                    s = stats.get(input_type, {})
-                    if not s:
-                        continue
-                    o = s.get("overall", {})
-                    if not o or not o.get("matches"):
-                        continue
-                    input_data.append({
-                        "Player": all_fn[name]["account"]["name"],
-                        "Input": label,
-                        "Matches": f"{o.get('matches', 0):,}",
-                        "Wins": f"{o.get('wins', 0):,}",
-                        "Win%": f"{o.get('winRate', 0) or 0:.1f}%",
-                        "K/D": f"{o.get('kd', 0) or 0:.2f}",
-                        "Kills": f"{o.get('kills', 0):,}",
-                        "K/Match": f"{o.get('killsPerMatch', 0) or 0:.2f}",
-                    })
-            if input_data:
-                st.dataframe(input_data, use_container_width=True, hide_index=True)
-            else:
-                st.caption("No per-input stats available (most players only show combined).")
 
             # Data Definitions
             st.markdown("---")
