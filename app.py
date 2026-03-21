@@ -914,11 +914,18 @@ with fn_tab:
                     return "#64b5f6"  # light blue / below avg
                 return "#1565c0"  # dark blue / poor
 
-            for name in names:
-                o = player_mode(name)
-                if not o or not o.get("matches", 0):
-                    continue
-                display = all_fn[name]["account"]["name"]
+            # Single player selector for percentile view
+            pct_col, _ = st.columns([1, 3])
+            with pct_col:
+                pct_player = st.selectbox(
+                    "Select Player", names,
+                    format_func=lambda n: all_fn[n]["account"]["name"],
+                    key="pct_player_select"
+                )
+
+            o = player_mode(pct_player)
+            if o and o.get("matches", 0):
+                display = all_fn[pct_player]["account"]["name"]
                 m = max(o.get("matches", 1) or 1, 1)
 
                 stats_for_pct = {
@@ -934,37 +941,36 @@ with fn_tab:
                     pct = value_to_percentile(stat_val, PERCENTILE_CURVES[stat_name])
                     pct = max(0, min(100, round(pct)))
                     color = pct_color(pct)
-                    # Format display value
+                    # Cap display width so circle doesn't overflow
+                    bar_width = min(pct, 96)
                     if stat_name == "Win Rate":
                         val_str = f"{stat_val:.1f}%"
                     elif stat_name in ("K/D", "Kills/Match"):
                         val_str = f"{stat_val:.2f}"
-                    elif stat_name in ("Score/Match", "Score/Min"):
-                        val_str = f"{stat_val:.1f}"
                     else:
                         val_str = f"{stat_val:.1f}"
 
                     bars_html += f"""
-                    <div style="display:flex;align-items:center;margin-bottom:6px;">
+                    <div style="display:flex;align-items:center;margin-bottom:8px;">
                         <div style="width:110px;font-size:0.8em;color:#a8a8b3;flex-shrink:0;">{stat_name}</div>
-                        <div style="flex:1;background:linear-gradient(90deg,#1565c0,#64b5f6,#b0bec5,#ef5350,#c8102e);border-radius:8px;height:22px;position:relative;overflow:hidden;">
-                            <div style="position:absolute;left:calc({pct}% - 14px);top:50%;transform:translateY(-50%);background:{color};color:white;font-size:0.7em;font-weight:800;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border:2px solid white;z-index:1;">{pct}</div>
+                        <div style="flex:1;background:#1a1a2e;border-radius:8px;height:24px;position:relative;">
+                            <div style="width:{bar_width}%;height:100%;background:{color};border-radius:8px;"></div>
+                            <div style="position:absolute;left:{bar_width}%;top:50%;transform:translate(-50%,-50%);background:{color};color:white;font-size:0.7em;font-weight:800;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border:2px solid white;">{pct}</div>
                         </div>
                         <div style="width:55px;text-align:right;font-size:0.8em;color:white;font-weight:700;flex-shrink:0;padding-left:8px;">{val_str}</div>
                     </div>"""
 
-                with st.expander(f"{display} - Percentile Rankings"):
-                    st.html(f"""
-                    <div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);border-radius:12px;padding:16px;border:1px solid #e94560;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                            <span style="color:#a8a8b3;font-size:0.7em;text-transform:uppercase;letter-spacing:1px;">POOR</span>
-                            <span style="color:#a8a8b3;font-size:0.7em;text-transform:uppercase;letter-spacing:1px;">AVERAGE</span>
-                            <span style="color:#a8a8b3;font-size:0.7em;text-transform:uppercase;letter-spacing:1px;">GREAT</span>
-                        </div>
-                        {bars_html}
-                        <div style="margin-top:8px;font-size:0.65em;color:#666;">Estimated percentiles based on community benchmarks. Not official Epic data.</div>
+                st.html(f"""
+                <div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);border-radius:12px;padding:16px;border:1px solid #e94560;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                        <span style="color:#a8a8b3;font-size:0.7em;text-transform:uppercase;letter-spacing:1px;">POOR</span>
+                        <span style="color:#a8a8b3;font-size:0.7em;text-transform:uppercase;letter-spacing:1px;">AVERAGE</span>
+                        <span style="color:#a8a8b3;font-size:0.7em;text-transform:uppercase;letter-spacing:1px;">GREAT</span>
                     </div>
-                    """)
+                    {bars_html}
+                    <div style="margin-top:8px;font-size:0.65em;color:#666;">Estimated percentiles based on community benchmarks. Not official Epic data.</div>
+                </div>
+                """)
 
             # Charts
             st.markdown("---")
