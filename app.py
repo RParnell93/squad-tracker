@@ -879,7 +879,13 @@ with fn_tab:
 
                 @st.fragment
                 def render_kd_trend():
-                    trend_windows = [(f"Wk {i+1}" if i > 0 else "This Week", i * 7, (i + 1) * 7) for i in range(12)]
+                    def week_label(i):
+                        if i == 0:
+                            return "This Week"
+                        if i == 1:
+                            return "Last Week"
+                        return f"Wk {12 - i}"
+                    trend_windows = [(week_label(i), i * 7, (i + 1) * 7) for i in range(12)]
                     now_ts = int(time.time())
 
                     if "trend_cache" not in st.session_state:
