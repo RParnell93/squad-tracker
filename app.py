@@ -143,9 +143,12 @@ st.markdown("""
 def get_fortnite_api_key():
     """Get API key from secrets (preferred) or session state fallback."""
     try:
-        return st.secrets["FORTNITE_API_KEY"]
-    except (KeyError, FileNotFoundError):
-        return st.session_state.get("fn_api_key_input", "")
+        key = st.secrets["FORTNITE_API_KEY"]
+        if key:
+            return key
+    except Exception:
+        pass
+    return st.session_state.get("fn_api_key_input", "")
 
 
 def load_squad():
@@ -237,8 +240,8 @@ game_tab = st.sidebar.radio("Game", ["Fortnite", "Overwatch 2"], horizontal=True
 if game_tab == "Fortnite":
     has_secret = False
     try:
-        has_secret = bool(st.secrets.get("FORTNITE_API_KEY"))
-    except FileNotFoundError:
+        has_secret = bool(st.secrets["FORTNITE_API_KEY"])
+    except Exception:
         pass
 
     if has_secret:
