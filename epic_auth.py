@@ -22,9 +22,29 @@ import requests
 TOKEN_FILE = os.path.join(os.path.dirname(__file__), ".epic_tokens.json")
 DEVICE_AUTH_FILE = os.path.join(os.path.dirname(__file__), ".epic_device_auth.json")
 
-# Fortnite PC Game Client (community-documented, used by all third-party tools)
-CLIENT_ID = "REDACTED_CLIENT_ID"
-CLIENT_SECRET = "REDACTED_CLIENT_SECRET"
+# Fortnite PC Game Client credentials - read from env/.env or fall back to defaults
+# These are community-documented public client creds, not personal secrets,
+# but we keep them out of source for good hygiene.
+_env_path = os.path.join(os.path.dirname(__file__), ".env")
+if os.path.exists(_env_path):
+    with open(_env_path) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _v = _line.split("=", 1)
+                os.environ.setdefault(_k.strip(), _v.strip())
+
+CLIENT_ID = os.environ.get("EPIC_CLIENT_ID", "")
+CLIENT_SECRET = os.environ.get("EPIC_CLIENT_SECRET", "")
+
+# Try Streamlit secrets as fallback (for cloud deployment)
+if not CLIENT_ID or not CLIENT_SECRET:
+    try:
+        import streamlit as st
+        CLIENT_ID = CLIENT_ID or st.secrets.get("EPIC_CLIENT_ID", "")
+        CLIENT_SECRET = CLIENT_SECRET or st.secrets.get("EPIC_CLIENT_SECRET", "")
+    except Exception:
+        pass
 
 OAUTH_TOKEN_URL = "https://account-public-service-prod.ol.epicgames.com/account/api/oauth/token"
 STATS_URL = "https://statsproxy-public-service-live.ol.epicgames.com/statsproxy/api/statsv2/account"
