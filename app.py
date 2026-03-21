@@ -202,10 +202,15 @@ if "squad" not in st.session_state:
     st.session_state.squad = load_squad()
     if "players" in st.session_state.squad:
         st.session_state.squad["fortnite_players"] = st.session_state.squad.pop("players", [])
-    if not st.session_state.squad.get("ow2_players"):
-        st.session_state.squad["ow2_players"] = list(DEFAULT_OW2_PLAYERS)
-    if not st.session_state.squad.get("fortnite_players"):
-        st.session_state.squad["fortnite_players"] = list(DEFAULT_FORTNITE_PLAYERS)
+    # Always ensure all default players are present
+    fn_existing = {p["name"] for p in st.session_state.squad.get("fortnite_players", [])}
+    for p in DEFAULT_FORTNITE_PLAYERS:
+        if p["name"] not in fn_existing:
+            st.session_state.squad.setdefault("fortnite_players", []).append(p)
+    ow2_existing = {p["name"] for p in st.session_state.squad.get("ow2_players", [])}
+    for p in DEFAULT_OW2_PLAYERS:
+        if p["name"] not in ow2_existing:
+            st.session_state.squad.setdefault("ow2_players", []).append(p)
 
 if "fn_cache" not in st.session_state:
     st.session_state.fn_cache = {}
