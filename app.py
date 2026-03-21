@@ -907,14 +907,16 @@ with fn_tab:
                 return 50
 
             def pct_color(pct):
-                """Return color based on percentile tier."""
+                """Return color matching Statcast blue-to-red gradient."""
                 if pct >= 90:
-                    return "#e94560"  # red/elite
-                if pct >= 70:
-                    return "#f5a623"  # orange/great
-                if pct >= 40:
-                    return "#4ecdc4"  # teal/average
-                return "#666"  # gray/below avg
+                    return "#c8102e"  # dark red / elite
+                if pct >= 75:
+                    return "#ef5350"  # light red / great
+                if pct >= 50:
+                    return "#b0bec5"  # gray / average
+                if pct >= 25:
+                    return "#64b5f6"  # light blue / below avg
+                return "#1565c0"  # dark blue / poor
 
             for name in names:
                 o = player_mode(name)
@@ -950,9 +952,8 @@ with fn_tab:
                     bars_html += f"""
                     <div style="display:flex;align-items:center;margin-bottom:6px;">
                         <div style="width:110px;font-size:0.8em;color:#a8a8b3;flex-shrink:0;">{stat_name}</div>
-                        <div style="flex:1;background:#1a1a2e;border-radius:8px;height:22px;position:relative;overflow:hidden;">
-                            <div style="width:{pct}%;height:100%;background:linear-gradient(90deg,#1a1a2e,{color});border-radius:8px;"></div>
-                            <div style="position:absolute;left:{max(pct - 4, 1)}%;top:50%;transform:translateY(-50%);background:{color};color:white;font-size:0.7em;font-weight:800;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;">{pct}</div>
+                        <div style="flex:1;background:linear-gradient(90deg,#1565c0,#64b5f6,#b0bec5,#ef5350,#c8102e);border-radius:8px;height:22px;position:relative;overflow:hidden;">
+                            <div style="position:absolute;left:calc({pct}% - 14px);top:50%;transform:translateY(-50%);background:{color};color:white;font-size:0.7em;font-weight:800;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border:2px solid white;z-index:1;">{pct}</div>
                         </div>
                         <div style="width:55px;text-align:right;font-size:0.8em;color:white;font-weight:700;flex-shrink:0;padding-left:8px;">{val_str}</div>
                     </div>"""
