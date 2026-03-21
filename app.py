@@ -249,16 +249,18 @@ def epic_parsed_to_mode_stats(parsed):
     Returns dict like: {"all": {"overall": {...}, "solo": {...}, ...}}
     """
     mode_map = {
-        "solo": ["defaultsolo", "nobuildbrsolo", "figmentsolo"],
-        "duo": ["defaultduo", "nobuildbrduos", "figmentduo"],
-        "squad": ["defaultsquad", "nobuildbrsquad", "sunflowernobuildsquad",
+        "solo": ["defaultsolo", "nobuildbrsolo", "nobuildbr_solo", "figmentsolo",
+                 "figmentnobuildsolo"],
+        "duo": ["defaultduo", "nobuildbrduos", "nobuildbr_duo", "figmentduo",
+                "figmentnobuildduo", "bots_nobuildbr_duo"],
+        "squad": ["defaultsquad", "nobuildbrsquad", "nobuildbr_squad", "sunflowernobuildsquad",
                   "arseniccore_squads_maxfog", "punchberrynobuildsquad",
-                  "mash_squads_legacy"],
-        "blitz": ["blitz"],
+                  "mash_squads_legacy", "forbiddenfruitnobuildbrsquad"],
+        "trio": ["trios", "nobuildbr_trio", "bots_nobuildbr_trio"],
     }
 
     totals = {}  # mode -> {metric: value}
-    for mode in ["solo", "duo", "squad", "blitz", "overall"]:
+    for mode in ["solo", "duo", "trio", "squad", "overall"]:
         totals[mode] = {}
 
     for input_type, playlists in parsed.items():
@@ -1114,7 +1116,7 @@ with fn_tab:
             # Game Mode Breakdown
             st.markdown("---")
             st.markdown("## Game Mode Breakdown")
-            mode_tab_sel = st.selectbox("Select Mode", ["Overall", "Solo", "Duo", "Squad", "Blitz", "LTM"], key="fn_mode")
+            mode_tab_sel = st.selectbox("Select Mode", ["Overall", "Solo", "Duo", "Trio", "Squad", "LTM"], key="fn_mode")
             mk = mode_tab_sel.lower()
             table_data = []
             for name in names:
