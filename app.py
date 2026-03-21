@@ -409,7 +409,7 @@ with fn_tab:
     if not fn_players:
         st.info("Add Fortnite players in the sidebar.")
     else:
-        if st.button("Refresh Fortnite Stats", type="primary", use_container_width=True):
+        if st.button("Refresh Stats"):
             st.session_state.fn_cache = {}
 
         all_fn = {}
@@ -572,7 +572,7 @@ with ow2_tab:
     if not ow2_players:
         st.info("Add OW2 players in the sidebar (switch to Overwatch 2 first).")
     else:
-        if st.button("Refresh OW2 Stats", type="primary", use_container_width=True):
+        if st.button("Refresh Stats"):
             st.session_state.ow2_cache = {}
 
         all_ow2 = {}
