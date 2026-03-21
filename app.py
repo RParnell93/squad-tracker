@@ -871,14 +871,32 @@ with fn_tab:
             else:
                 st.caption("No per-input stats available (most players only show combined).")
 
-            # K/D Trend (weekly segments over 12 weeks) - static, independent of time window
+            # Weekly Trend (12 weeks) - static, independent of time window
             if epic_ids:
                 st.markdown("---")
-                st.markdown("## K/D Trend (Past 12 Weeks)")
-                st.caption("Weekly K/D calculated from Epic stats proxy. Each point shows K/D for that week only. This chart is independent of the time window filter above.")
 
                 @st.fragment
-                def render_kd_trend():
+                def render_trend():
+                    TREND_METRICS = {
+                        "K/D": {"key": "kd", "fmt": lambda v: round(v, 2), "axis": "K/D Ratio"},
+                        "Win Rate": {"key": "winRate", "fmt": lambda v: round(v, 1), "axis": "Win Rate %"},
+                        "Kills/Match": {"key": "killsPerMatch", "fmt": lambda v: round(v, 2), "axis": "Kills per Match"},
+                        "Score/Min": {"key": "scorePerMin", "fmt": lambda v: round(v, 1), "axis": "Score per Minute"},
+                        "Score/Match": {"key": "scorePerMatch", "fmt": lambda v: round(v, 1), "axis": "Score per Match"},
+                        "Top 10": {"key": "top10", "fmt": lambda v: int(v), "axis": "Top 10 Finishes"},
+                        "Top 25": {"key": "top25", "fmt": lambda v: int(v), "axis": "Top 25 Finishes"},
+                        "Hours Played": {"key": "minutesPlayed", "fmt": lambda v: round(v / 60, 1), "axis": "Hours Played"},
+                    }
+
+                    selected_metric = st.selectbox(
+                        "Trend Metric", list(TREND_METRICS.keys()), index=0,
+                        key="trend_metric_select"
+                    )
+                    metric_info = TREND_METRICS[selected_metric]
+
+                    st.markdown(f"## {selected_metric} Trend (Past 12 Weeks)")
+                    st.caption("Weekly values from Epic stats proxy. Each point is one week. Independent of the time window filter above.")
+
                     def week_label(i):
                         if i == 0:
                             return "This Week"
@@ -902,7 +920,7 @@ with fn_tab:
                                 break
 
                     if trend_missing:
-                        with st.spinner("Loading K/D trend data..."):
+                        with st.spinner("Loading trend data..."):
                             for n in names:
                                 aid = epic_ids.get(n)
                                 if not aid:
@@ -923,6 +941,12 @@ with fn_tab:
                                             "kills": o.get("kills", 0),
                                             "matches": o.get("matches", 0),
                                             "winRate": o.get("winRate", 0),
+                                            "killsPerMatch": o.get("killsPerMatch", 0),
+                                            "scorePerMin": o.get("scorePerMin", 0),
+                                            "scorePerMatch": o.get("scorePerMatch", 0),
+                                            "top10": o.get("top10", 0),
+                                            "top25": o.get("top25", 0),
+                                            "minutesPlayed": o.get("minutesPlayed", 0),
                                         }
                                     else:
                                         st.session_state.trend_cache[ck] = None
@@ -930,6 +954,8 @@ with fn_tab:
 
                     fig = go.Figure()
                     x_labels = [w[0] for w in reversed(trend_windows)]
+                    mk = metric_info["key"]
+                    fmt_fn = metric_info["fmt"]
                     for n in names:
                         aid = epic_ids.get(n)
                         if not aid:
@@ -938,8 +964,8 @@ with fn_tab:
                         for lbl, d_s, d_e in reversed(trend_windows):
                             ck = f"trend_{aid}_{d_s}_{d_e}"
                             cached = st.session_state.trend_cache.get(ck)
-                            if cached and cached.get("matches", 0) > 0:
-                                y_vals.append(round(cached["kd"], 2))
+                            if cached and cached.get("matches", 0) > 0 and mk in cached:
+                                y_vals.append(fmt_fn(cached[mk]))
                             else:
                                 y_vals.append(None)
                         fig.add_trace(go.Scatter(
@@ -950,12 +976,12 @@ with fn_tab:
                     fig.update_layout(
                         template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)",
                         paper_bgcolor="rgba(0,0,0,0)", height=450,
-                        yaxis_title="K/D Ratio", font=dict(color="white"),
+                        yaxis_title=metric_info["axis"], font=dict(color="white"),
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                     )
                     st.plotly_chart(fig, use_container_width=True)
 
-                render_kd_trend()
+                render_trend()
 
             # Data Definitions
             st.markdown("---")
