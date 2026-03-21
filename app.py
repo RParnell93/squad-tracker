@@ -882,10 +882,6 @@ with fn_tab:
                     (0, 0), (100, 15), (200, 30), (300, 45), (400, 55),
                     (500, 65), (700, 78), (900, 85), (1200, 92), (1500, 96), (2000, 100),
                 ],
-                "Score/Min": [
-                    (0, 0), (1, 10), (2, 25), (3, 40), (4, 55),
-                    (5, 65), (6, 75), (8, 85), (10, 92), (12, 96), (15, 100),
-                ],
                 "Outlived/Match": [
                     (0, 0), (10, 10), (20, 25), (30, 35), (40, 45),
                     (50, 55), (60, 65), (70, 78), (80, 88), (90, 95), (95, 100),
@@ -930,7 +926,6 @@ with fn_tab:
                     "Win Rate": o.get("winRate", 0) or 0,
                     "Kills/Match": o.get("killsPerMatch", 0) or 0,
                     "Score/Match": o.get("scorePerMatch", 0) or 0,
-                    "Score/Min": o.get("scorePerMin", 0) or 0,
                     "Outlived/Match": (o.get("playersOutlived", 0) or 0) / m,
                 }
 
