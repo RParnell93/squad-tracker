@@ -948,14 +948,18 @@ with ow2_tab:
                     </div>
 
                     <div class="stat-row"><span class="stat-label">Games Played</span><span class="stat-value">{games:,}</span></div>
+                    <div class="stat-row"><span class="stat-label">W / L</span><span class="stat-value">{wins:,} / {losses:,}</span></div>
                     <div class="stat-row"><span class="stat-label">KDA</span><span class="stat-highlight">{kda:.2f}{kda_badge}</span></div>
                     <div class="stat-row"><span class="stat-label">Win Rate</span><span class="stat-highlight">{winrate:.1f}%{wr_badge}</span></div>
                     <div class="stat-row"><span class="stat-label">Eliminations</span><span class="stat-value">{total.get('eliminations', 0):,}</span></div>
+                    <div class="stat-row"><span class="stat-label">Assists</span><span class="stat-value">{total.get('assists', 0):,}</span></div>
                     <div class="stat-row"><span class="stat-label">Deaths</span><span class="stat-value">{total.get('deaths', 0):,}</span></div>
                     <div class="stat-row"><span class="stat-label">Damage Done</span><span class="stat-value">{total.get('damage', 0):,}</span></div>
                     <div class="stat-row"><span class="stat-label">Healing Done</span><span class="stat-value">{total.get('healing', 0):,}</span></div>
                     <div class="stat-row"><span class="stat-label">Avg Elims/Game</span><span class="stat-value">{avg.get('eliminations', 0):.1f}</span></div>
+                    <div class="stat-row"><span class="stat-label">Avg Assists/Game</span><span class="stat-value">{avg.get('assists', 0):.1f}</span></div>
                     <div class="stat-row"><span class="stat-label">Avg Dmg/Game</span><span class="stat-value">{avg.get('damage', 0):,.0f}</span></div>
+                    <div class="stat-row"><span class="stat-label">Avg Healing/Game</span><span class="stat-value">{avg.get('healing', 0):,.0f}</span></div>
                     <div class="stat-row"><span class="stat-label">Hours Played</span><span class="stat-value">{hours:,.1f}</span></div>
                 </div>""")
 
@@ -999,6 +1003,20 @@ with ow2_tab:
                 colors = ["#f99e1a" if v == max(wrs) else "#16213e" for v in wrs]
                 fig = go.Figure(go.Bar(x=ow2_display, y=wrs, marker_color=colors, text=[f"{v:.1f}%" for v in wrs], textposition="outside"))
                 fig.update_layout(title="Win Rate", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=400, font=dict(color="white"))
+                st.plotly_chart(fig, use_container_width=True)
+
+            c3, c4 = st.columns(2)
+            with c3:
+                dmgs = [all_ow2[n].get("stats", {}).get("general", {}).get("average", {}).get("damage", 0) for n in ow2_names]
+                colors = ["#f99e1a" if v == max(dmgs) else "#16213e" for v in dmgs]
+                fig = go.Figure(go.Bar(x=ow2_display, y=dmgs, marker_color=colors, text=[f"{v:,.0f}" for v in dmgs], textposition="outside"))
+                fig.update_layout(title="Avg Damage / Game", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=400, font=dict(color="white"))
+                st.plotly_chart(fig, use_container_width=True)
+            with c4:
+                heals = [all_ow2[n].get("stats", {}).get("general", {}).get("average", {}).get("healing", 0) for n in ow2_names]
+                colors = ["#f99e1a" if v == max(heals) else "#16213e" for v in heals]
+                fig = go.Figure(go.Bar(x=ow2_display, y=heals, marker_color=colors, text=[f"{v:,.0f}" for v in heals], textposition="outside"))
+                fig.update_layout(title="Avg Healing / Game", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=400, font=dict(color="white"))
                 st.plotly_chart(fig, use_container_width=True)
 
             # Radar - normalize each stat to 0-100 across squad
@@ -1049,10 +1067,53 @@ with ow2_tab:
                     "Win%": f"{g.get('winrate', 0):.1f}%",
                     "KDA": f"{g.get('kda', 0):.2f}",
                     "Elims": f"{t.get('eliminations', 0):,}",
+                    "Assists": f"{t.get('assists', 0):,}",
                     "Deaths": f"{t.get('deaths', 0):,}",
+                    "Dmg": f"{t.get('damage', 0):,}",
+                    "Healing": f"{t.get('healing', 0):,}",
                     "Avg Elims": f"{a.get('eliminations', 0):.1f}",
+                    "Avg Assists": f"{a.get('assists', 0):.1f}",
                     "Avg Dmg": f"{a.get('damage', 0):,.0f}",
                     "Avg Healing": f"{a.get('healing', 0):,.0f}",
+                    "Hours": f"{round(g.get('time_played', 0) / 3600, 1):,.1f}",
                 })
             if table_data:
                 st.dataframe(table_data, use_container_width=True, hide_index=True)
+
+            # Hero Breakdown
+            st.markdown("---")
+            st.markdown("## Hero Breakdown")
+            hero_player = st.selectbox("Select Player", ow2_display, key="ow2_hero_player")
+            hero_player_key = ow2_names[ow2_display.index(hero_player)]
+            heroes = all_ow2[hero_player_key].get("stats", {}).get("heroes", {})
+            if heroes:
+                hero_data = []
+                for hero_name, h in heroes.items():
+                    if h.get("games_played", 0) == 0:
+                        continue
+                    ha = h.get("average", {})
+                    ht = h.get("total", {})
+                    hero_data.append({
+                        "Hero": hero_name.replace("-", " ").title(),
+                        "Games": h.get("games_played", 0),
+                        "Win%": round(h.get("winrate", 0), 1),
+                        "KDA": round(h.get("kda", 0), 2),
+                        "Avg Elims": round(ha.get("eliminations", 0), 1),
+                        "Avg Dmg": round(ha.get("damage", 0)),
+                        "Avg Healing": round(ha.get("healing", 0)),
+                        "Hours": round(h.get("time_played", 0) / 3600, 1),
+                    })
+                hero_data.sort(key=lambda x: x["Games"], reverse=True)
+                st.dataframe(hero_data, use_container_width=True, hide_index=True)
+
+                # Top 5 heroes bar chart
+                top5 = hero_data[:5]
+                if top5:
+                    fig = go.Figure()
+                    fig.add_trace(go.Bar(name="Avg Elims", x=[h["Hero"] for h in top5], y=[h["Avg Elims"] for h in top5], marker_color="#f99e1a"))
+                    fig.add_trace(go.Bar(name="KDA", x=[h["Hero"] for h in top5], y=[h["KDA"] for h in top5], marker_color="#e94560"))
+                    fig.update_layout(title=f"{hero_player}'s Top 5 Heroes", barmode="group", template="plotly_dark",
+                                      plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=400, font=dict(color="white"))
+                    st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.caption("No hero data available for this player.")
