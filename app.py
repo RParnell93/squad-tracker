@@ -162,6 +162,9 @@ DEFAULT_FORTNITE_PLAYERS = [
     {"name": "crazy in basye", "type": "xbl", "platform": "Xbox"},
     {"name": "i7vosunz458", "type": "xbl", "platform": "Xbox"},
     {"name": "callmepot", "type": "epic", "platform": "Epic (PC)"},
+    {"name": "Jbone", "type": "epic", "platform": "Epic (PC)"},
+    {"name": "classic", "type": "epic", "platform": "Epic (PC)"},
+    {"name": "hailedcanvas141", "type": "xbl", "platform": "Xbox"},
 ]
 
 DEFAULT_OW2_PLAYERS = [
@@ -385,13 +388,7 @@ if game_tab == "Fortnite":
     platform_map = {"Xbox": "xbl", "PlayStation": "psn", "Epic (PC)": "epic"}
 
     # Quick-add presets
-    preset_players = [
-        {"name": "astros44", "type": "xbl", "platform": "Xbox"},
-        {"name": "zippomanjingles", "type": "psn", "platform": "PlayStation"},
-        {"name": "crazy in basye", "type": "xbl", "platform": "Xbox"},
-        {"name": "i7vosunz458", "type": "xbl", "platform": "Xbox"},
-        {"name": "callmepot", "type": "epic", "platform": "Epic (PC)"},
-    ]
+    preset_players = list(DEFAULT_FORTNITE_PLAYERS)
     current_names = {p["name"] for p in st.session_state.squad.get("fortnite_players", [])}
     available_presets = [p for p in preset_players if p["name"] not in current_names]
 
