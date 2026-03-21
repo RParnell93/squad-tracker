@@ -981,7 +981,7 @@ with fn_tab:
 |--------|--------|-------|
 | **Lifetime** | fortnite-api.com | All-time career stats. |
 | **Season** | fortnite-api.com | Current season only. |
-| **Last 7 / 30 Days** | Epic Stats Proxy | Custom time window via Epic OAuth. Requires device auth. |
+| **Last 7 / 30 Days** | Epic Stats Proxy | Custom time window via Epic OAuth. One account powers lookups for everyone. |
 | **Custom Range** | Epic Stats Proxy | Pick any start/end date. Same source as 7/30 day. |
 
 **Input Types:** KB/Mouse, Gamepad (controller), Touch (mobile). Stats are tracked separately by Epic per input device.
