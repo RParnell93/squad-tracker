@@ -762,8 +762,8 @@ with fn_tab:
                 window_label = time_window.upper()
 
                 s7, s30 = perf_scores.get(name, (None, None))
-                circle_7d = score_circle_html(s7, "7 Day")
-                circle_30d = score_circle_html(s30, "30 Day")
+                circle_7d = score_circle_html(s7, "7D Dub Score")
+                circle_30d = score_circle_html(s30, "30D Dub Score")
 
                 fn_cards_html.append(f"""
                 <div class="battle-card">
