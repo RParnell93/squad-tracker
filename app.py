@@ -6,7 +6,7 @@ import time
 from datetime import date, datetime, timedelta
 import plotly.graph_objects as go
 from epic_auth import (
-    load_tokens, get_valid_token, lookup_account_by_name,
+    load_tokens, load_device_auth, get_valid_token, lookup_account_by_name,
     stats_for_window, fetch_stats_epic, parse_raw_stats,
 )
 
@@ -522,7 +522,7 @@ with fn_tab:
                         st.error(f"Could not find **{p['name']}** on {p.get('platform', p['type'])}.")
 
         # Resolve Epic account IDs (needed for 7/30 day stats)
-        has_epic = bool(load_tokens())
+        has_epic = bool(load_tokens() or load_device_auth())
         if has_epic and "epic_ids" not in st.session_state:
             with st.spinner("Resolving Epic account IDs..."):
                 epic_ids = {}
