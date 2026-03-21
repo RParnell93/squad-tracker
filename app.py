@@ -167,10 +167,10 @@ DEFAULT_OW2_PLAYERS = [
     {"name": "bigdumpy", "player_id": "f057ab8ea67c8bb4a4a126a7d603%7C4e6a5ab09612cbe141cc5cca93318eab"},
     {"name": "meowforheals", "player_id": "ff5ba39db57e89a5ecf17be3c903a40a4a%7C675748059c6913c6fafb628a567232f0"},
     {"name": "classic", "player_id": "f152ad99a07898e0baa120a7d4%7C156e54723040e35b417b08d93b151741"},
-    {"name": "batzz0"},
-    {"name": "gascan"},
-    {"name": "greybeast"},
-    {"name": "jbone"},
+    {"name": "Batzz"},
+    {"name": "GasCan"},
+    {"name": "GreyBeast"},
+    {"name": "Jbone"},
     {"name": "Paulpummeler"},
     {"name": "i7vosunz458"},
 ]
@@ -314,18 +314,21 @@ def fetch_epic_account_ids(fn_players):
 
 # ── OW2 API ──────────────────────────────────────────────────────────────────
 def search_ow2_player(name):
-    """Search for an OW2 player by name, return player_id if found."""
-    try:
-        resp = requests.get(f"{OW2_API}/players", params={"name": name}, timeout=30)
-        data = resp.json()
-        results = data.get("results", [])
-        public = [r for r in results if r.get("is_public")]
-        if public:
-            return public[0]
-        if results:
-            return results[0]
-    except Exception:
-        pass
+    """Search for an OW2 player by name, trying multiple case variants."""
+    variants = list(dict.fromkeys([name, name.title(), name.capitalize(), name.lower(), name.upper()]))
+    for variant in variants:
+        try:
+            resp = requests.get(f"{OW2_API}/players", params={"name": variant}, timeout=30)
+            data = resp.json()
+            results = data.get("results", [])
+            public = [r for r in results if r.get("is_public")]
+            if public:
+                return public[0]
+            if results:
+                return results[0]
+        except Exception:
+            pass
+        time.sleep(1)
     return None
 
 
@@ -439,10 +442,10 @@ else:  # OW2
         {"name": "bigdumpy", "player_id": "f057ab8ea67c8bb4a4a126a7d603%7C4e6a5ab09612cbe141cc5cca93318eab"},
         {"name": "meowforheals", "player_id": "ff5ba39db57e89a5ecf17be3c903a40a4a%7C675748059c6913c6fafb628a567232f0"},
         {"name": "classic", "player_id": "f152ad99a07898e0baa120a7d4%7C156e54723040e35b417b08d93b151741"},
-        {"name": "batzz0"},
-        {"name": "gascan"},
-        {"name": "greybeast"},
-        {"name": "jbone"},
+        {"name": "Batzz"},
+        {"name": "GasCan"},
+        {"name": "GreyBeast"},
+        {"name": "Jbone"},
         {"name": "Paulpummeler"},
         {"name": "i7vosunz458"},
     ]
