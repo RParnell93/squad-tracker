@@ -700,27 +700,23 @@ with fn_tab:
                     return "#ffc107"  # yellow
                 return "#ef5350"  # red
 
-            def score_circle_svg(score, label, size=80):
-                """SVG donut circle like WHOOP recovery scores."""
+            def score_circle_html(score, label):
+                """CSS donut circle like WHOOP recovery scores."""
                 if score is None:
                     score_text = "--"
-                    pct = 0
+                    deg = 0
                 else:
                     score_text = str(score)
-                    pct = score / 100
+                    deg = round(score * 3.6)
                 color = score_color(score)
-                r = 34
-                circ = 2 * 3.14159 * r
-                dash = circ * pct
-                gap = circ - dash
-                return f'''<svg width="{size}" height="{size}" viewBox="0 0 {size} {size}">
-                    <circle cx="{size//2}" cy="{size//2}" r="{r}" fill="none" stroke="#1a1a2e" stroke-width="6"/>
-                    <circle cx="{size//2}" cy="{size//2}" r="{r}" fill="none" stroke="{color}" stroke-width="6"
-                        stroke-dasharray="{dash:.1f} {gap:.1f}" stroke-linecap="round"
-                        transform="rotate(-90 {size//2} {size//2})"/>
-                    <text x="{size//2}" y="{size//2 - 4}" text-anchor="middle" fill="white" font-size="18" font-weight="800">{score_text}</text>
-                    <text x="{size//2}" y="{size//2 + 12}" text-anchor="middle" fill="#a8a8b3" font-size="8" font-weight="600">{label}</text>
-                </svg>'''
+                return f'''<div style="display:flex;flex-direction:column;align-items:center;">
+                    <div style="width:72px;height:72px;border-radius:50%;background:conic-gradient({color} {deg}deg, #1a1a2e {deg}deg);display:flex;align-items:center;justify-content:center;">
+                        <div style="width:58px;height:58px;border-radius:50%;background:#16213e;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+                            <span style="color:white;font-size:18px;font-weight:800;line-height:1;">{score_text}</span>
+                        </div>
+                    </div>
+                    <span style="color:#a8a8b3;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-top:4px;">{label}</span>
+                </div>'''
 
             # Compute 7d and 30d performance scores per player
             perf_scores = {}
@@ -766,8 +762,8 @@ with fn_tab:
                 window_label = time_window.upper()
 
                 s7, s30 = perf_scores.get(name, (None, None))
-                circle_7d = score_circle_svg(s7, "7 DAY")
-                circle_30d = score_circle_svg(s30, "30 DAY")
+                circle_7d = score_circle_html(s7, "7 Day")
+                circle_30d = score_circle_html(s30, "30 Day")
 
                 fn_cards_html.append(f"""
                 <div class="battle-card">
