@@ -1,0 +1,8 @@
+{
+  "fortnite_players": [
+    {"name": "your_gamertag", "type": "xbl", "platform": "Xbox"}
+  ],
+  "ow2_players": [
+    {"name": "your_battletag"}
+  ]
+}
