@@ -22,6 +22,7 @@ DEFAULT_OW2_PLAYERS = [
     {"name": "GasCan", "player_id": "d55fbfa9b27fd6fcb8a220a4%7C60d238a9723f0c5c425ab4c56d4579b8"},
     {"name": "GreyBeast", "player_id": "d54ca99391749abefdbd25a7d607a5%7C2b7fa8e1b80a57998ee25a9d17f99925"},
     {"name": "i7vosunz458"},
+    {"name": "Jbone", "player_id": "junkrob-1142"},
 ]
 
 # Shared card CSS used in st.html() blocks (scoped) - parameterized by accent color
@@ -39,9 +40,9 @@ def card_css(accent="#e94560", badge_color="#e94560"):
         .stat-label {{ color: #a8a8b3; font-size: 0.82em; white-space: nowrap; }}
         .stat-value {{ color: white; font-weight: 700; font-size: 0.9em; white-space: nowrap; }}
         .stat-highlight {{ color: {accent}; font-weight: 700; font-size: 0.9em; white-space: nowrap; }}
-        .big-stat {{ text-align: center; padding: 8px; }}
-        .big-stat-value {{ font-size: 1.8em; font-weight: 800; color: white; }}
-        .big-stat-label {{ font-size: 0.7em; color: #a8a8b3; text-transform: uppercase; letter-spacing: 0.5px; }}
+        .big-stat {{ text-align: center; padding: 4px; min-width: 0; }}
+        .big-stat-value {{ font-size: clamp(1.2em, 4vw, 1.6em); font-weight: 800; color: white; white-space: nowrap; }}
+        .big-stat-label {{ font-size: 0.65em; color: #a8a8b3; text-transform: uppercase; letter-spacing: 0.5px; }}
         .rank-badge {{ display: inline-block; background: {badge_color}; color: white; padding: 2px 6px; border-radius: 12px; font-size: 0.65em; font-weight: 700; margin-left: 4px; white-space: nowrap; }}
         .player-avatar {{ width: 64px; height: 64px; border-radius: 50%; border: 2px solid {accent}; margin-bottom: 8px; }}
         .rank-icon {{ width: 40px; height: 40px; vertical-align: middle; margin-right: 6px; }}

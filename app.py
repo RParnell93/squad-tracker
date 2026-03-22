@@ -1464,21 +1464,27 @@ elif active_game == "Overwatch 2":
                     hero_data.sort(key=lambda x: x["Games"], reverse=True)
                     st.dataframe(hero_data, width="stretch", hide_index=True)
 
-                    # Top 5 heroes bar chart
-                    top5 = hero_data[:5]
+                    # Top 5 heroes horizontal bar chart
+                    top5 = sorted(hero_data[:5], key=lambda x: x["Avg Elims"])
                     if top5:
-                        fig = go.Figure()
-                        fig.add_trace(go.Bar(name="Avg Elims", x=[h["Hero"] for h in top5], y=[h["Avg Elims"] for h in top5], marker_color="#f99e1a"))
-                        fig.add_trace(go.Scatter(name="KDA", x=[h["Hero"] for h in top5], y=[h["KDA"] for h in top5],
-                                                 mode="lines+markers+text", text=[f"{h['KDA']:.2f}" for h in top5], textposition="top center",
-                                                 textfont=dict(size=11, color="#e94560"),
-                                                 line=dict(color="#e94560", width=2.5), marker=dict(size=8, color="#e94560"),
-                                                 yaxis="y2"))
-                        fig.update_layout(title=f"{hero_player}'s Top 5 Heroes", template="plotly_dark",
-                                          plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350,
-                                          font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80),
-                                          yaxis=dict(title="Avg Elims"), yaxis2=dict(title="KDA", overlaying="y", side="right", showgrid=False))
-                        st.plotly_chart(fig, width="stretch")
+                        heroes_y = [h["Hero"] for h in top5]
+                        elims_x = [h["Avg Elims"] for h in top5]
+                        kda_texts = [f'{h["KDA"]:.2f}' for h in top5]
+                        max_val = max(elims_x) if elims_x else 1
+                        best_val = max(elims_x)
+                        colors = ["#f99e1a" if v == best_val else "#16213e" for v in elims_x]
+                        texts = [f"{v:.1f}  (KDA: {k})" for v, k in zip(elims_x, kda_texts)]
+                        fig = go.Figure(go.Bar(
+                            y=heroes_y, x=elims_x, orientation="h",
+                            marker_color=colors, text=texts,
+                            textposition="outside", hoverinfo="none", cliponaxis=False,
+                        ))
+                        h = max(250, len(top5) * 40 + 80)
+                        fig.update_layout(title=f"{hero_player}'s Top 5 Heroes (Avg Elims)", template="plotly_dark",
+                                          plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=h,
+                                          font=dict(family="JetBrains Mono, monospace", color="white"),
+                                          margin=dict(l=120, r=140), xaxis=dict(range=[0, max_val * 1.35]))
+                        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
                 else:
                     st.caption("No hero data available for this player.")
 
