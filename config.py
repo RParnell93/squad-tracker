@@ -12,6 +12,7 @@ DEFAULT_FORTNITE_PLAYERS = [
     {"name": "callmepot", "type": "epic", "platform": "Epic (PC)", "epic_name": "callmepot"},
     {"name": "mrfox733", "type": "xbl", "platform": "Xbox", "epic_name": "mrfox733"},
     {"name": "gascan46310", "type": "xbl", "platform": "Xbox", "epic_name": "Gascan46310", "epic_id": "caf1138b62b845108deaa20827a24777"},
+    {"name": "harpbaby", "type": "epic", "platform": "Nintendo Switch", "epic_name": "Harpbaby"},
 ]
 
 DEFAULT_OW2_PLAYERS = [
@@ -22,7 +23,7 @@ DEFAULT_OW2_PLAYERS = [
     {"name": "GasCan", "player_id": "d55fbfa9b27fd6fcb8a220a4%7C60d238a9723f0c5c425ab4c56d4579b8"},
     {"name": "GreyBeast", "player_id": "d54ca99391749abefdbd25a7d607a5%7C2b7fa8e1b80a57998ee25a9d17f99925"},
     {"name": "i7vosunz458"},
-    {"name": "junkrob", "player_id": "junkrob-1142"},
+    {"name": "junkrob", "player_id": "JunkRob-1142"},
 ]
 
 # Shared card CSS used in st.html() blocks (scoped) - parameterized by accent color
@@ -34,6 +35,7 @@ def card_css(accent="#e94560", badge_color="#e94560"):
         .cards-scroll {{ display: flex; gap: 16px; overflow-x: auto; padding: 8px 0 16px 0; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }}
         .cards-scroll .battle-card {{ min-width: 280px; max-width: 340px; flex: 1 0 280px; scroll-snap-align: start; }}
         .battle-card {{ background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); border-radius: 16px; padding: 20px; border: 2px solid {accent}; color: white; overflow: visible; word-wrap: break-word; box-sizing: border-box; font-family: 'JetBrains Mono', monospace; }}
+        .battle-card.supreme-red {{ border-color: #e94560 !important; box-shadow: 0 0 12px rgba(233,69,96,0.3); }}
         .player-name {{ font-size: 1.1em; font-weight: 800; margin-bottom: 4px; color: {accent}; text-transform: uppercase; letter-spacing: 0.5px; }}
         .player-platform {{ font-size: 0.8em; color: #a8a8b3; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }}
         .stat-row {{ display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }}

@@ -216,3 +216,42 @@ def get_all_week_ranges(num_weeks=12):
         week_start = week_end - timedelta(days=6)
         weeks.append((week_start, week_end))
     return list(reversed(weeks))
+
+
+def get_ytd_week_ranges(extra_seed_weeks=3):
+    """Get Mon-Sun week ranges for the current year plus seed weeks from prior year.
+    The seed weeks are needed for rolling averages but won't be displayed.
+    Returns (all_weeks, display_start_idx) where display_start_idx marks
+    where YTD weeks begin (skip seed weeks for display).
+    """
+    today = date.today()
+    year = today.year
+    days_since_sunday = (today.weekday() + 1) % 7
+    if days_since_sunday == 0:
+        last_sunday = today - timedelta(days=7)
+    else:
+        last_sunday = today - timedelta(days=days_since_sunday)
+
+    # Find the first Monday on or after Jan 1 of this year
+    jan1 = date(year, 1, 1)
+    days_to_monday = (7 - jan1.weekday()) % 7
+    first_monday = jan1 + timedelta(days=days_to_monday)
+    if first_monday > jan1:
+        # Jan 1 wasn't a Monday - include the partial week starting from previous Monday
+        first_monday = jan1 - timedelta(days=jan1.weekday())
+
+    # Build all weeks from first_monday to last_sunday
+    ytd_weeks = []
+    ws = first_monday
+    while ws + timedelta(days=6) <= last_sunday:
+        ytd_weeks.append((ws, ws + timedelta(days=6)))
+        ws += timedelta(days=7)
+
+    # Add seed weeks before YTD
+    seed_weeks = []
+    for i in range(extra_seed_weeks, 0, -1):
+        seed_start = first_monday - timedelta(weeks=i)
+        seed_weeks.append((seed_start, seed_start + timedelta(days=6)))
+
+    all_weeks = seed_weeks + ytd_weeks
+    return all_weeks, len(seed_weeks)

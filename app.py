@@ -29,6 +29,8 @@ from db import fetch_weekly_trends, fetch_player_cache, fetch_ow2_cache, get_all
 
 st.set_page_config(page_title="Squad Tracker", page_icon="🎮", layout="wide")
 
+PLOTLY_CONFIG = {"displayModeBar": False, "scrollZoom": False}
+
 # ── CSS ──────────────────────────────────────────────────────────────────────
 st.markdown(CSS, unsafe_allow_html=True)
 
@@ -224,11 +226,11 @@ with st.sidebar:
     st.markdown(f'<div class="sidebar-header"><span class="icon">{_game_icon}</span><span class="title">{_game_label} Squad</span></div>', unsafe_allow_html=True)
 
     if active_game == "Fortnite":
-        platform_map = {"Xbox": "xbl", "PlayStation": "psn", "Epic (PC)": "epic"}
+        platform_map = {"Xbox": "xbl", "PlayStation": "psn", "Epic (PC)": "epic", "Nintendo Switch": "epic"}
 
         st.markdown("---")
-        _platform_colors = {"Xbox": "#2d9f2d", "PlayStation": "#006fcd", "Epic (PC)": "#6b6b7b"}
-        _plat_short = {"Xbox": "XBOX", "PlayStation": "PSN", "Epic (PC)": "PC"}
+        _platform_colors = {"Xbox": "#2d9f2d", "PlayStation": "#006fcd", "Epic (PC)": "#6b6b7b", "Nintendo Switch": "#e4000f"}
+        _plat_short = {"Xbox": "XBOX", "PlayStation": "PSN", "Epic (PC)": "PC", "Nintendo Switch": "NSW"}
         fn_list = st.session_state.squad.get("fortnite_players", [])
         if fn_list:
             st.markdown(f'<div class="sidebar-section">Your Squad ({len(fn_list)})</div>', unsafe_allow_html=True)
@@ -253,13 +255,28 @@ with st.sidebar:
             new_platform = st.selectbox("Platform", list(platform_map.keys()), key="fn_platform")
             if st.button("Add Player", key="fn_add", width="stretch"):
                 if new_name.strip():
-                    st.session_state.squad["fortnite_players"].append({
-                        "name": new_name.strip(),
-                        "type": platform_map[new_platform],
-                        "platform": new_platform,
-                    })
-                    _save_and_sync(st.session_state.squad)
-                    st.rerun()
+                    _api_key = get_fortnite_api_key()
+                    if _api_key:
+                        with st.spinner(f"Looking up {new_name.strip()}..."):
+                            _test = fetch_fortnite_stats(new_name.strip(), platform_map[new_platform], _api_key)
+                        if _test:
+                            st.session_state.squad["fortnite_players"].append({
+                                "name": new_name.strip(),
+                                "type": platform_map[new_platform],
+                                "platform": new_platform,
+                            })
+                            _save_and_sync(st.session_state.squad)
+                            st.rerun()
+                        else:
+                            st.error(f"Player \"{new_name.strip()}\" not found on {new_platform}. Check the name and platform.")
+                    else:
+                        st.session_state.squad["fortnite_players"].append({
+                            "name": new_name.strip(),
+                            "type": platform_map[new_platform],
+                            "platform": new_platform,
+                        })
+                        _save_and_sync(st.session_state.squad)
+                        st.rerun()
 
     else:  # OW2
         ow2_preset_players = list(DEFAULT_OW2_PLAYERS)
@@ -290,7 +307,15 @@ with st.sidebar:
                     st.rerun()
 
     st.markdown("---")
-    st.markdown('<div class="sidebar-share"><p>Your squad auto-saves in this browser. Share the link to let friends load your squad.</p></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div style="text-align:center;margin:0.5rem 0;">'
+        '<button onclick="navigator.clipboard.writeText(window.location.href).then(()=>{this.textContent=\'Copied!\';setTimeout(()=>{this.textContent=\'Share Link\'},2000)})" '
+        'style="background:linear-gradient(135deg,#1a1a2e,#16213e);border:1px solid #e94560;color:#e94560;'
+        'padding:8px 20px;border-radius:8px;font-family:\'JetBrains Mono\',monospace;font-size:0.8rem;'
+        'font-weight:700;cursor:pointer;letter-spacing:0.5px;width:100%;">'
+        'Share Link</button></div>',
+        unsafe_allow_html=True
+    )
 
 # ═══════════════════════════════════════════════════════════════════════════
 # FORTNITE
@@ -562,7 +587,7 @@ if active_game == "Fortnite":
                 overall = player_mode(name)
                 bp = data.get("battlePass", {})
                 platform = next((p["platform"] for p in fn_players if p["name"] == name), "")
-                _plat_colors = {"Xbox": "#2d9f2d", "PlayStation": "#006fcd", "Epic (PC)": "#6b6b7b"}
+                _plat_colors = {"Xbox": "#2d9f2d", "PlayStation": "#006fcd", "Epic (PC)": "#6b6b7b", "Nintendo Switch": "#e4000f"}
                 _plat_abbr = {"Xbox": "XBOX", "PlayStation": "PSN", "Epic (PC)": "PC"}
                 _plat_c = _plat_colors.get(platform, "#6b6b7b")
                 _plat_tag = f'<span style="background:{_plat_c};color:white;padding:2px 8px;border-radius:4px;font-size:0.7em;font-weight:700;letter-spacing:0.5px;">{_plat_abbr.get(platform, platform)}</span>'
@@ -580,7 +605,9 @@ if active_game == "Fortnite":
                 hours = round((overall.get("minutesPlayed", 0) or 0) / 60, 1)
                 outlived = overall.get("playersOutlived", 0) or 0
                 opm = round(outlived / max(matches, 1), 1)
-                last_on = (overall.get("lastModified", "") or "")[:10]
+                # Get lastModified from lifetime data (not available in windowed stats)
+                _lt_overall = all_fn[name].get("stats", {}).get("all", {}).get("overall", {})
+                last_on = (overall.get("lastModified", "") or _lt_overall.get("lastModified", "") or "")[:10]
 
                 s7, s30 = perf_scores.get(name, (None, None))
                 is_active = name in active_names
@@ -674,7 +701,7 @@ if active_game == "Fortnite":
                 # Build x labels with date ranges
                 x_labels = []
                 for i, (ws, we) in enumerate(week_ranges):
-                    date_range = f"{ws.strftime('%b %-d')}-{we.strftime('%-d')}"
+                    date_range = f"{ws.strftime('%b %-d')}-{we.strftime('%b %-d')}" if ws.month != we.month else f"{ws.strftime('%b %-d')}-{we.strftime('%-d')}"
                     if i == len(week_ranges) - 1:
                         x_labels.append(f"Last Week<br><span style='font-size:0.7em;color:#6e7681;'>{date_range}</span>")
                     elif i == len(week_ranges) - 2:
@@ -719,9 +746,9 @@ if active_game == "Fortnite":
                     yaxis_title=metric_info["axis"], yaxis_range=y_range,
                     font=dict(family="JetBrains Mono, monospace", color="white"),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10)),
-                    margin=dict(t=60, b=40),
+                    margin=dict(t=60, b=40), dragmode=False,
                 )
-                st.plotly_chart(fig, width="stretch")
+                st.plotly_chart(fig, width="stretch", config=PLOTLY_CONFIG)
 
             render_trend()
 
@@ -811,9 +838,9 @@ if active_game == "Fortnite":
                     hoverlabel=dict(font_size=14, font_family="JetBrains Mono, monospace"),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10)),
                     margin=dict(t=60, b=40),
-                    xaxis=dict(tickformat="%b %d"),
+                    xaxis=dict(tickformat="%b %d"), dragmode=False,
                 )
-                st.plotly_chart(fig, width="stretch")
+                st.plotly_chart(fig, width="stretch", config=PLOTLY_CONFIG)
 
             # Charts
             st.markdown("---")
@@ -830,8 +857,8 @@ if active_game == "Fortnite":
                 _max_val = max(s_vals) if s_vals else 1
                 fig.update_layout(title=title, template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                                   height=h, font=dict(family="JetBrains Mono, monospace", color="white"), margin=dict(l=140, r=100),
-                                  xaxis=dict(range=[0, _max_val * 1.2]))
-                st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+                                  xaxis=dict(range=[0, _max_val * 1.2]), dragmode=False)
+                st.plotly_chart(fig, width="stretch", config=PLOTLY_CONFIG)
 
             c1, c2 = st.columns(2)
             with c1:
@@ -846,6 +873,7 @@ if active_game == "Fortnite":
                 _hbar(display_names, [player_mode(n).get("scorePerMatch", 0) or 0 for n in names], "Score / Match", "{:.0f}")
 
             # Radar - normalize each stat to 0-100 across squad
+            st.divider()
             st.markdown("### Skill Radar")
             categories = ["K/D", "Win%", "Kills/Match", "Score/Min", "Outlived/Match", "Score/Match"]
             raw_data = {}
@@ -876,8 +904,8 @@ if active_game == "Fortnite":
                     theta=categories, fill="toself", name=all_fn[name]["account"]["name"], opacity=0.6,
                 ))
             fig.update_layout(polar=dict(bgcolor="rgba(0,0,0,0)", radialaxis=dict(visible=True, range=[0, 105], color="#a8a8b3", showticklabels=False), angularaxis=dict(color="#a8a8b3")),
-                              template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=420, font=dict(family="JetBrains Mono, monospace", color="white"))
-            st.plotly_chart(fig, width="stretch")
+                              template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=420, font=dict(family="JetBrains Mono, monospace", color="white"), dragmode=False)
+            st.plotly_chart(fig, width="stretch", config=PLOTLY_CONFIG)
 
             # Player Deep Dive
             st.markdown("---")
@@ -1257,9 +1285,9 @@ elif active_game == "Overwatch 2":
                 dub_score = ow2_dub_scores.get(name)
                 circle_html = score_circle_html(dub_score, "Dub Score")
 
-                _supreme_ribbon_ow = '<div style="position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#ffd700,#ffaa00);color:#1a1a2e;padding:2px 12px;border-radius:10px;font-size:0.55rem;font-weight:800;letter-spacing:0.5px;white-space:nowrap;z-index:1;">SUPREME LEADER</div>' if is_supreme else ''
+                _supreme_ribbon_ow = '<div style="position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#e94560,#c23152);color:white;padding:2px 12px;border-radius:10px;font-size:0.55rem;font-weight:800;letter-spacing:0.5px;white-space:nowrap;z-index:1;">SUPREME LEADER</div>' if is_supreme else ''
                 ow2_cards_html.append(f"""
-                <div class="battle-card" style="position:relative;margin-top:14px;{'border-color:#ffd700;box-shadow:0 0 12px rgba(255,215,0,0.3);' if is_supreme else ''}">
+                <div class="battle-card" style="position:relative;margin-top:14px;{'border:2px solid #e94560;box-shadow:0 0 12px rgba(233,69,96,0.3);' if is_supreme else ''}">
                     {_supreme_ribbon_ow}
                     {avatar_html}
                     <div class="player-name">{username}</div>
@@ -1315,8 +1343,8 @@ elif active_game == "Overwatch 2":
                 _max_val = max(s_vals) if s_vals else 1
                 fig.update_layout(title=title, template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                                   height=h, font=dict(family="JetBrains Mono, monospace", color="white"), margin=dict(l=140, r=100),
-                                  xaxis=dict(range=[0, _max_val * 1.2]))
-                st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+                                  xaxis=dict(range=[0, _max_val * 1.2]), dragmode=False)
+                st.plotly_chart(fig, width="stretch", config=PLOTLY_CONFIG)
 
             c1, c2 = st.columns(2)
             with c1:
@@ -1331,6 +1359,7 @@ elif active_game == "Overwatch 2":
                 _hbar_ow2(ow2_display, [all_ow2[n].get("stats", {}).get("general", {}).get("average", {}).get("healing", 0) for n in ow2_names], "Avg Healing / Game", "{:,.0f}")
 
             # Radar - normalize each stat to 0-100 across squad
+            st.divider()
             st.markdown("### Skill Radar")
             categories = ["KDA", "Win%", "Avg Elims", "Avg Dmg (k)", "Avg Healing (k)"]
             raw_ow2 = {}
@@ -1354,8 +1383,8 @@ elif active_game == "Overwatch 2":
                     theta=categories, fill="toself", name=all_ow2[n].get("summary", {}).get("username", n), opacity=0.6,
                 ))
             fig.update_layout(polar=dict(bgcolor="rgba(0,0,0,0)", radialaxis=dict(visible=True, range=[0, 105], color="#a8a8b3", showticklabels=False), angularaxis=dict(color="#a8a8b3")),
-                              template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=420, font=dict(family="JetBrains Mono, monospace", color="white"))
-            st.plotly_chart(fig, width="stretch")
+                              template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=420, font=dict(family="JetBrains Mono, monospace", color="white"), dragmode=False)
+            st.plotly_chart(fig, width="stretch", config=PLOTLY_CONFIG)
 
             # Role breakdown table
             st.markdown("---")
@@ -1447,8 +1476,8 @@ elif active_game == "Overwatch 2":
                         fig.update_layout(title=f"{hero_player}'s Top 5 Heroes (Avg Elims)", template="plotly_dark",
                                           plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=h,
                                           font=dict(family="JetBrains Mono, monospace", color="white"),
-                                          margin=dict(l=120, r=140), xaxis=dict(range=[0, max_val * 1.35]))
-                        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+                                          margin=dict(l=120, r=140), xaxis=dict(range=[0, max_val * 1.35]), dragmode=False)
+                        st.plotly_chart(fig, width="stretch", config=PLOTLY_CONFIG)
                 else:
                     st.caption("No hero data available for this player.")
 
