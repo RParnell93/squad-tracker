@@ -438,14 +438,15 @@ with fn_tab:
                 top25 = overall.get("top25", 0) or 0
                 last_on = (overall.get("lastModified", "") or "")[:10]
 
-                kd_badge = ' <span class="rank-badge">BEST</span>' if kd == best_kd and len(all_fn) > 1 and kd > 0 else ""
-                wr_badge = ' <span class="rank-badge">BEST</span>' if wr == best_wr and len(all_fn) > 1 and wr > 0 else ""
-                kills_badge = ' <span class="rank-badge">BEST</span>' if kills == best_kills and len(all_fn) > 1 and kills > 0 else ""
-                kpm_badge = ' <span class="rank-badge">BEST</span>' if kpm == best_kpm and len(all_fn) > 1 and kpm > 0 else ""
+                s7, s30 = perf_scores.get(name, (None, None))
+                has_recent = s7 is not None and s7 > 0 and s30 is not None and s30 > 0
+                kd_badge = ' <span class="rank-badge">BEST</span>' if has_recent and kd == best_kd and len(all_fn) > 1 and kd > 0 else ""
+                wr_badge = ' <span class="rank-badge">BEST</span>' if has_recent and wr == best_wr and len(all_fn) > 1 and wr > 0 else ""
+                kills_badge = ' <span class="rank-badge">BEST</span>' if has_recent and kills == best_kills and len(all_fn) > 1 and kills > 0 else ""
+                kpm_badge = ' <span class="rank-badge">BEST</span>' if has_recent and kpm == best_kpm and len(all_fn) > 1 and kpm > 0 else ""
 
                 window_label = time_window.upper()
 
-                s7, s30 = perf_scores.get(name, (None, None))
                 circle_7d = score_circle_html(s7, "7-Day<br>Dub Score")
                 circle_30d = score_circle_html(s30, "30-Day<br>Dub Score")
 
@@ -804,7 +805,11 @@ with fn_tab:
                     stats_block = "\n".join(summary_lines)
                     cache_key = f"ai_summary_{hash(stats_block)}"
 
-                    if cache_key not in st.session_state:
+                    col_btn, _ = st.columns([1, 3])
+                    with col_btn:
+                        generate_clicked = st.button("Generate Summary", key="ai_summary_btn", use_container_width=True)
+
+                    if generate_clicked and cache_key not in st.session_state:
                         with st.spinner("Generating weekly summary..."):
                             try:
                                 import anthropic
@@ -832,7 +837,8 @@ Write a 3-5 paragraph weekly summary that:
                             except Exception as e:
                                 st.session_state[cache_key] = f"Could not generate summary: {e}"
 
-                    st.markdown(st.session_state[cache_key])
+                    if cache_key in st.session_state:
+                        st.markdown(st.session_state[cache_key])
                 else:
                     st.caption("No 7-day data available for AI summary.")
 
