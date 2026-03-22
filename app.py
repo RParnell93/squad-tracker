@@ -689,7 +689,14 @@ if active_game == "Fortnite":
                         line=dict(width=3), marker=dict(size=10),
                     ))
 
-                y_range = [0, metric_info["max_y"]] if "max_y" in metric_info else None
+                if "max_y" in metric_info:
+                    # Find actual max across all traces, cap at configured max_y unless data exceeds it
+                    all_y = [v for trace in fig.data for v in trace.y if v is not None]
+                    data_max = max(all_y) if all_y else 0
+                    y_ceil = max(metric_info["max_y"], data_max * 1.1)
+                    y_range = [0, y_ceil]
+                else:
+                    y_range = None
                 fig.update_layout(
                     template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)",
                     paper_bgcolor="rgba(0,0,0,0)", height=400,
