@@ -634,8 +634,8 @@ if active_game == "Fortnite":
                 fn_cards_html.append(f"""
                 <div class="battle-card" style="position:relative;margin-top:14px;{'border-color:#ffd700;box-shadow:0 0 12px rgba(255,215,0,0.3);' if is_supreme else ''}">
                     {_supreme_ribbon}
-                    <div class="player-name">{data['account']['name']}</div>
-                    <div class="player-platform" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">{_plat_tag} <span>BP Lv {bp.get('level', '?')}</span></div>
+                    <div class="player-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">{data['account']['name']} {_plat_tag}</div>
+                    <div class="player-platform">BP Lv {bp.get('level', '?')}</div>
                     <div style="display: flex; justify-content: center; gap: 16px; margin-bottom: 12px;">
                         {circle_7d}{circle_30d}
                     </div>
