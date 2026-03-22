@@ -801,10 +801,20 @@ with fn_tab:
                 else:
                     st.caption("Powered by Claude. Based on the last 7 days of stats.")
 
+                    # Player pronouns for the AI summary
+                    PLAYER_PRONOUNS = {"Gascan46310": "she/her"}
+
                     # Build this-week and last-week stats for WoW comparison
                     summary_lines = []
                     wow_lines = []
+                    dub_lines = []
                     trend_data = st.session_state.get("trend_cache", {})
+
+                    def _delta(curr, prev, fmt=".2f"):
+                        diff = curr - prev
+                        sign = "+" if diff >= 0 else ""
+                        return f"{sign}{diff:{fmt}}"
+
                     for name in names:
                         display = all_fn[name]["account"]["name"]
                         aid = epic_ids.get(name)
@@ -827,13 +837,12 @@ with fn_tab:
                             f"Top 10s {o7.get('top10', 0)}, "
                             f"Hours {round((o7.get('minutesPlayed', 0) or 0) / 60, 1)}"
                         )
+                        # Add Dub Score context
+                        s7_score, s30_score = perf_scores.get(name, (None, None))
+                        dub_lines.append(f"{display}: 7-Day Dub Score {s7_score or 'N/A'}, 30-Day Dub Score {s30_score or 'N/A'}")
                         # Pull last week from trend cache for WoW
                         lw = trend_data.get(f"trend_{aid}_{FETCH_7D}_{FETCH_7D * 2}")
                         if lw and lw.get("matches", 0) > 0:
-                            def _delta(curr, prev, fmt=".2f"):
-                                diff = curr - prev
-                                sign = "+" if diff >= 0 else ""
-                                return f"{sign}{diff:{fmt}}"
                             wow_lines.append(
                                 f"{display} WoW: K/D {_delta(o7.get('kd',0), lw.get('kd',0))}, "
                                 f"Win Rate {_delta(o7.get('winRate',0), lw.get('winRate',0), '.1f')}%, "
@@ -843,8 +852,16 @@ with fn_tab:
 
                     if summary_lines:
                         stats_block = "\n".join(summary_lines)
+                        dub_block = "\n".join(dub_lines)
                         wow_block = "\n".join(wow_lines) if wow_lines else "No last-week data available for comparison."
-                        cache_key = f"ai_summary_{hash(stats_block + wow_block)}"
+                        # Build pronoun context
+                        pronoun_notes = []
+                        for name in names:
+                            display = all_fn[name]["account"]["name"]
+                            if display in PLAYER_PRONOUNS:
+                                pronoun_notes.append(f"{display} uses {PLAYER_PRONOUNS[display]} pronouns")
+                        pronoun_block = "\n".join(pronoun_notes) if pronoun_notes else ""
+                        cache_key = f"ai_summary_{hash(stats_block + wow_block + dub_block)}"
 
                         col_btn, _ = st.columns([1, 2])
                         with col_btn:
@@ -861,25 +878,36 @@ with fn_tab:
                                             "role": "user",
                                             "content": f"""You are a Fortnite squad analyst writing a fun weekly recap for a friend group.
 
-THIS WEEK'S STATS (last 7 days):
+THIS WEEK'S STATS (last 7 days only):
 {stats_block}
+
+DUB SCORES (composite performance rating, 0-100 scale):
+{dub_block}
 
 WEEK-OVER-WEEK CHANGES:
 {wow_block}
 
-Write a weekly summary (200-250 words) that:
-1. MVP of the Week - who had the best overall performance and why (use specific numbers)
-2. Week-over-Week trends - call out who improved, who slipped, who went MIA. Use the WoW deltas.
-3. Superlatives - most kills, best K/D, highest win rate, most improved, biggest dropoff, grindiest (most matches/hours)
-4. Roasts and shoutouts - be playful and specific. If someone barely played, call it out. If someone died more than they killed, roast them.
-5. Challenge for next week - a specific, fun challenge for the squad or individual players
+{f"PLAYER NOTES:{chr(10)}{pronoun_block}" if pronoun_block else ""}
 
-Rules:
-- ONLY reference the 7-day stats provided. Do NOT mention lifetime, career, or all-time stats.
-- Use their display names exactly as shown.
-- Keep it casual, like a group chat message.
+Write a weekly summary (200-250 words) covering:
+1. MVP of the Week - best overall performance with specific numbers from this week
+2. Week-over-Week trends - who improved, who slipped, who went MIA (use the WoW deltas)
+3. Dub Score check - call out low Dub Scores and challenge those players to improve
+4. Superlatives - most kills, best K/D, highest win rate, most improved, grindiest (most matches/hours). Double-check your claims against the numbers - don't say someone leads a stat if they don't.
+5. Roasts and shoutouts - playful and specific. Low K/D? More deaths than kills? Barely played? Call it out.
+6. Challenge for next week - specific and fun
+
+Writing rules:
+- ONLY reference the 7-day stats provided. Never mention lifetime, career, or all-time numbers.
+- Use display names exactly as shown.
+- Respect player pronouns listed in PLAYER NOTES.
+- Write like a real person in a group chat. No corporate voice, no "let's delve into", no "it's worth noting".
+- No em dashes. Use commas, periods, or hyphens instead.
 - No emojis.
-- If a player has 0 matches this week, note they were absent."""
+- Don't oversell or inflate. "Solid K/D" not "absolutely bonkers insane K/D".
+- Don't use "pivotal", "landscape", "robust", "comprehensive", "witnessing", or "peak performance".
+- Don't start paragraphs with "But let's talk about" or "Here's where it gets spicy".
+- Be direct. Cut filler. If you can say it shorter, do."""
                                         }]
                                     )
                                     st.session_state[cache_key] = resp.content[0].text
