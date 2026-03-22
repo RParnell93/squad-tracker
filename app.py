@@ -427,7 +427,6 @@ with fn_tab:
                 opm = round(outlived / max(matches, 1), 1)
                 top10 = overall.get("top10", 0) or 0
                 top25 = overall.get("top25", 0) or 0
-                solo_m = (player_mode(name, "solo").get("matches", 0) or 0)
                 last_on = (overall.get("lastModified", "") or "")[:10]
 
                 kd_badge = ' <span class="rank-badge">BEST</span>' if kd == best_kd and len(all_fn) > 1 and kd > 0 else ""
@@ -466,8 +465,8 @@ with fn_tab:
                     <div class="stat-row"><span class="stat-label">Score / Match</span><span class="stat-value">{spmatch:.1f}</span></div>
                     <div class="stat-row"><span class="stat-label">Players Outlived</span><span class="stat-value">{outlived:,}</span></div>
                     <div class="stat-row"><span class="stat-label">Outlived / Match</span><span class="stat-value">{opm}</span></div>
-                    <div class="stat-row"><span class="stat-label">Top 10s <span style="color:#666;font-size:0.8em;">(solo)</span></span><span class="stat-value">{top10:,}{f' <span style="color:#90caf9;">({top10 / solo_m * 100:.1f}%)</span>' if solo_m > 0 else ''}</span></div>
-                    <div class="stat-row"><span class="stat-label">Top 25s <span style="color:#666;font-size:0.8em;">(solo)</span></span><span class="stat-value">{top25:,}{f' <span style="color:#90caf9;">({top25 / solo_m * 100:.1f}%)</span>' if solo_m > 0 else ''}</span></div>
+                    <div class="stat-row"><span class="stat-label">Top 10s</span><span class="stat-value">{top10:,} <span style="color:#90caf9;">({top10 / max(matches, 1) * 100:.1f}%)</span></span></div>
+                    <div class="stat-row"><span class="stat-label">Top 25s</span><span class="stat-value">{top25:,} <span style="color:#90caf9;">({top25 / max(matches, 1) * 100:.1f}%)</span></span></div>
                     <div class="stat-row"><span class="stat-label">Hours Played</span><span class="stat-value">{hours:,.1f}</span></div>
                     <div class="stat-row"><span class="stat-label">Last Active</span><span class="stat-value">{last_on}</span></div>
                 </div>""")
