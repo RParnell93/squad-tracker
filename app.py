@@ -226,26 +226,6 @@ with st.sidebar:
     if active_game == "Fortnite":
         platform_map = {"Xbox": "xbl", "PlayStation": "psn", "Epic (PC)": "epic"}
 
-        preset_players = list(DEFAULT_FORTNITE_PLAYERS)
-        current_names = {p["name"] for p in st.session_state.squad.get("fortnite_players", [])}
-        available_presets = [p for p in preset_players if p["name"] not in current_names]
-
-        if available_presets:
-            st.markdown('<div class="sidebar-section">Quick Add</div>', unsafe_allow_html=True)
-            preset_names = ["-- Select a friend --"] + [f"{p['name']} ({p['platform']})" for p in available_presets]
-            preset_choice = st.selectbox("Quick Add", preset_names, key="fn_preset", label_visibility="collapsed")
-            c1, c2 = st.columns(2)
-            if c1.button("Add Selected", key="fn_preset_add", width="stretch"):
-                idx = preset_names.index(preset_choice) - 1
-                if idx >= 0:
-                    st.session_state.squad["fortnite_players"].append(available_presets[idx])
-                    _save_and_sync(st.session_state.squad)
-                    st.rerun()
-            if c2.button("Add All", key="fn_preset_all", width="stretch"):
-                st.session_state.squad["fortnite_players"].extend(available_presets)
-                _save_and_sync(st.session_state.squad)
-                st.rerun()
-
         st.markdown("---")
         _platform_colors = {"Xbox": "#2d9f2d", "PlayStation": "#006fcd", "Epic (PC)": "#6b6b7b"}
         _plat_short = {"Xbox": "XBOX", "PlayStation": "PSN", "Epic (PC)": "PC"}
@@ -285,22 +265,6 @@ with st.sidebar:
         ow2_preset_players = list(DEFAULT_OW2_PLAYERS)
         ow2_current = {p["name"] for p in st.session_state.squad.get("ow2_players", [])}
         ow2_available = [p for p in ow2_preset_players if p["name"] not in ow2_current]
-
-        if ow2_available:
-            st.markdown('<div class="sidebar-section">Quick Add</div>', unsafe_allow_html=True)
-            ow2_preset_names = ["-- Select a friend --"] + [p["name"] for p in ow2_available]
-            ow2_choice = st.selectbox("Quick Add", ow2_preset_names, key="ow2_preset", label_visibility="collapsed")
-            c1, c2 = st.columns(2)
-            if c1.button("Add Selected", key="ow2_preset_add", width="stretch"):
-                ow2_idx = ow2_preset_names.index(ow2_choice) - 1
-                if ow2_idx >= 0:
-                    st.session_state.squad["ow2_players"].append(ow2_available[ow2_idx])
-                    _save_and_sync(st.session_state.squad)
-                    st.rerun()
-            if c2.button("Add All", key="ow2_preset_all", width="stretch"):
-                st.session_state.squad["ow2_players"].extend(ow2_available)
-                _save_and_sync(st.session_state.squad)
-                st.rerun()
 
         st.markdown("---")
         ow2_list = st.session_state.squad.get("ow2_players", [])
