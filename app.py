@@ -863,10 +863,12 @@ if active_game == "Fortnite":
                 colors = [accent if v == max(s_vals) else "#16213e" for v in s_vals]
                 texts = [fmt.format(v) for v in s_vals]
                 fig = go.Figure(go.Bar(y=list(s_labels), x=list(s_vals), marker_color=colors, text=texts,
-                                       textposition="outside", orientation="h", hoverinfo="none"))
+                                       textposition="outside", orientation="h", hoverinfo="none", cliponaxis=False))
                 h = max(250, len(s_labels) * 40 + 80)
+                _max_val = max(s_vals) if s_vals else 1
                 fig.update_layout(title=title, template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                                  height=h, font=dict(family="JetBrains Mono, monospace", color="white"), margin=dict(l=140, r=80))
+                                  height=h, font=dict(family="JetBrains Mono, monospace", color="white"), margin=dict(l=140, r=100),
+                                  xaxis=dict(range=[0, _max_val * 1.2]))
                 st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
             c1, c2 = st.columns(2)
@@ -1342,10 +1344,12 @@ elif active_game == "Overwatch 2":
                 colors = [accent if v == max(s_vals) else "#16213e" for v in s_vals]
                 texts = [fmt.format(v) for v in s_vals]
                 fig = go.Figure(go.Bar(y=list(s_labels), x=list(s_vals), marker_color=colors, text=texts,
-                                       textposition="outside", orientation="h", hoverinfo="none"))
+                                       textposition="outside", orientation="h", hoverinfo="none", cliponaxis=False))
                 h = max(250, len(s_labels) * 40 + 80)
+                _max_val = max(s_vals) if s_vals else 1
                 fig.update_layout(title=title, template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                                  height=h, font=dict(family="JetBrains Mono, monospace", color="white"), margin=dict(l=140, r=80))
+                                  height=h, font=dict(family="JetBrains Mono, monospace", color="white"), margin=dict(l=140, r=100),
+                                  xaxis=dict(range=[0, _max_val * 1.2]))
                 st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
             c1, c2 = st.columns(2)
