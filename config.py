@@ -70,15 +70,24 @@ CSS = """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
 
-    /* Global font override - exclude Material Icons used by Streamlit widgets */
+    /* Global font override - target text elements only, leave icons alone */
     html, body, [class*="css"], .stApp,
     [data-testid="stSidebar"],
-    [data-testid="stSidebar"] *:not([class*="icon"]):not([class*="Icon"]):not([data-testid*="icon"]):not(.material-icons):not(.material-symbols-rounded):not(.material-symbols-outlined) {
+    [data-testid="stSidebar"] p,
+    [data-testid="stSidebar"] span,
+    [data-testid="stSidebar"] div,
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] input,
+    [data-testid="stSidebar"] button,
+    [data-testid="stSidebar"] select {
         font-family: 'JetBrains Mono', monospace !important;
     }
-    /* Preserve Streamlit's icon fonts */
+    /* Restore Streamlit's icon fonts - must win over the above */
+    [data-testid="stSidebar"] [data-testid="stIcon"],
+    [data-testid="stSidebar"] [data-testid="stIconMaterial"],
+    [data-testid="stSidebar"] .material-symbols-rounded,
     .material-icons, .material-symbols-rounded, .material-symbols-outlined,
-    [class*="icon-font"], span[data-testid="stIconMaterial"] {
+    [data-testid="stIcon"], [data-testid="stIconMaterial"] {
         font-family: 'Material Symbols Rounded', 'Material Icons' !important;
     }
     /* Headings - tighter tracking for mono */
@@ -87,7 +96,8 @@ CSS = """
         font-family: 'JetBrains Mono', monospace !important;
         letter-spacing: -0.5px;
     }
-    h2, .stApp h2 { font-size: 1.3em; }
+    h1, .stApp h1 { font-size: 1.6em; }
+    h2, .stApp h2 { font-size: 1.25em; }
     h3, .stApp h3 { font-size: 1.05em; }
     /* Inputs and selects */
     input, select, textarea, button,
