@@ -801,8 +801,11 @@ with fn_tab:
                 else:
                     st.caption("Powered by Claude. Based on the last 7 days of stats.")
 
-                    # Player pronouns for the AI summary
-                    PLAYER_PRONOUNS = {"Gascan46310": "she/her"}
+                    # Player context for the AI summary
+                    PLAYER_NOTES = {
+                        "Gascan46310": "she/her pronouns",
+                        "i7VoSUNZ458": "he/him. Always tease or roast this player. Find something to rib him about no matter how well he played - low win rate, too many hours, dying too much, whatever you can find. Make it funny.",
+                    }
 
                     # Build this-week and last-week stats for WoW comparison
                     summary_lines = []
@@ -854,13 +857,13 @@ with fn_tab:
                         stats_block = "\n".join(summary_lines)
                         dub_block = "\n".join(dub_lines)
                         wow_block = "\n".join(wow_lines) if wow_lines else "No last-week data available for comparison."
-                        # Build pronoun context
-                        pronoun_notes = []
+                        # Build player notes context
+                        player_notes = []
                         for name in names:
                             display = all_fn[name]["account"]["name"]
-                            if display in PLAYER_PRONOUNS:
-                                pronoun_notes.append(f"{display} uses {PLAYER_PRONOUNS[display]} pronouns")
-                        pronoun_block = "\n".join(pronoun_notes) if pronoun_notes else ""
+                            if display in PLAYER_NOTES:
+                                player_notes.append(f"- {display}: {PLAYER_NOTES[display]}")
+                        notes_block = "\n".join(player_notes) if player_notes else ""
                         cache_key = f"ai_summary_{hash(stats_block + wow_block + dub_block)}"
 
                         col_btn, _ = st.columns([1, 2])
@@ -887,7 +890,7 @@ DUB SCORES (composite performance rating, 0-100 scale):
 WEEK-OVER-WEEK CHANGES:
 {wow_block}
 
-{f"PLAYER NOTES:{chr(10)}{pronoun_block}" if pronoun_block else ""}
+{f"PLAYER NOTES:{chr(10)}{notes_block}" if notes_block else ""}
 
 Write a weekly summary (200-250 words) covering:
 1. MVP of the Week - best overall performance with specific numbers from this week
@@ -900,7 +903,7 @@ Write a weekly summary (200-250 words) covering:
 Writing rules:
 - ONLY reference the 7-day stats provided. Never mention lifetime, career, or all-time numbers.
 - Use display names exactly as shown.
-- Respect player pronouns listed in PLAYER NOTES.
+- Follow ALL instructions in PLAYER NOTES (pronouns, roast targets, etc.).
 - Write like a real person in a group chat. No corporate voice, no "let's delve into", no "it's worth noting".
 - No em dashes. Use commas, periods, or hyphens instead.
 - No emojis.
