@@ -346,18 +346,37 @@ if active_game == "Fortnite":
         all_fn = {}
         db_7d = {}
         db_30d = {}
+        _fn_needs_live = []
         for p in fn_players:
             name = p["name"]
             pc = db_cache.get(name, {})
             if "lifetime" in pc:
                 all_fn[name] = pc["lifetime"]
+            else:
+                _fn_needs_live.append(p)
             if "7d" in pc:
                 db_7d[name] = pc["7d"]
             if "30d" in pc:
                 db_30d[name] = pc["30d"]
 
+        # Live API fallback for players not in MotherDuck cache
+        if _fn_needs_live:
+            _api_key = get_fortnite_api_key()
+            if _api_key:
+                for p in _fn_needs_live:
+                    name = p["name"]
+                    # Check session cache first
+                    if f"live_fn_{name}" in st.session_state:
+                        all_fn[name] = st.session_state[f"live_fn_{name}"]
+                        continue
+                    with st.spinner(f"Loading {name} from API..."):
+                        data = fetch_fortnite_stats(name, p.get("type", "epic"), _api_key)
+                        if data:
+                            all_fn[name] = data
+                            st.session_state[f"live_fn_{name}"] = data
+
         if not all_fn:
-            st.info("No cached stats available yet. Stats refresh daily at 7am ET.")
+            st.info("No stats available. Check player names or try again later.")
         else:
             # Helper to get stats for the selected time window
             def get_stats(data, name, time_window):
@@ -608,9 +627,9 @@ if active_game == "Fortnite":
 
                 is_supreme = name == fn_supreme and len(all_fn) > 1
 
-                _supreme_ribbon = '<div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#ffd700,#ffaa00);color:#1a1a2e;padding:2px 12px;border-radius:10px;font-size:0.55rem;font-weight:800;letter-spacing:0.5px;white-space:nowrap;z-index:1;">SUPREME LEADER</div>' if is_supreme else ''
+                _supreme_ribbon = '<div style="position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#ffd700,#ffaa00);color:#1a1a2e;padding:2px 12px;border-radius:10px;font-size:0.55rem;font-weight:800;letter-spacing:0.5px;white-space:nowrap;z-index:1;">SUPREME LEADER</div>' if is_supreme else ''
                 fn_cards_html.append(f"""
-                <div class="battle-card" style="position:relative;{'border-color:#ffd700;box-shadow:0 0 12px rgba(255,215,0,0.3);margin-top:10px;' if is_supreme else ''}">
+                <div class="battle-card" style="position:relative;margin-top:14px;{'border-color:#ffd700;box-shadow:0 0 12px rgba(255,215,0,0.3);' if is_supreme else ''}">
                     {_supreme_ribbon}
                     <div class="player-name">{data['account']['name']}</div>
                     <div class="player-platform" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">{_plat_tag} <span>BP Lv {bp.get('level', '?')}</span></div>
@@ -628,7 +647,7 @@ if active_game == "Fortnite":
                     <div class="stat-row"><span class="stat-label">Deaths</span><span class="stat-value">{deaths:,}</span></div>
                     <div class="stat-row"><span class="stat-label">K/D Ratio</span><span class="stat-highlight">{kd:.2f}{kd_badge}</span></div>
                     <div class="stat-row"><span class="stat-label">Kills / Match</span><span class="stat-highlight">{kpm:.2f}{kpm_badge}</span></div>
-                    <div class="stat-row"><span class="stat-label">Score</span><span class="stat-value">{score:,}</span></div>
+                    <div class="stat-row"><span class="stat-label">Total Score</span><span class="stat-value">{score:,}</span></div>
                     <div class="stat-row"><span class="stat-label">Score / Min</span><span class="stat-value">{spm:.1f}</span></div>
                     <div class="stat-row"><span class="stat-label">Score / Match</span><span class="stat-value">{spmatch:.1f}</span></div>
                     <div class="stat-row"><span class="stat-label">Players Outlived</span><span class="stat-value">{outlived:,}</span></div>
@@ -788,30 +807,25 @@ if active_game == "Fortnite":
                     values = [w.get(metric_info["key"], 0) or 0 for w in player_weeks]
 
                 display_name = all_fn[rolling_player]["account"]["name"]
-                avg_val = sum(values) / len(values) if values else 0
 
+                # Show rolling average only (3-week window), raw for cumulative
                 fig = go.Figure()
+                if metric_info.get("cumulative") or len(values) < 3:
+                    plot_values = values
+                else:
+                    plot_values = []
+                    for i in range(len(values)):
+                        window = values[max(0, i - 2):i + 1]
+                        plot_values.append(round(sum(window) / len(window), 2))
+
                 fig.add_trace(go.Scatter(
-                    x=dates, y=values,
+                    x=dates, y=plot_values,
                     mode="lines+markers",
                     line=dict(color="#e94560", width=3),
                     marker=dict(size=6),
-                    name=display_name,
+                    name=f"{display_name} (3-Wk Avg)" if not metric_info.get("cumulative") else display_name,
                     hovertemplate="%{x|%b %d}<br>" + rolling_metric + ": %{y}<extra></extra>",
                 ))
-                if not metric_info.get("cumulative") and len(values) >= 3:
-                    # 3-week rolling average
-                    rolling = []
-                    for i in range(len(values)):
-                        window = values[max(0, i - 2):i + 1]
-                        rolling.append(sum(window) / len(window))
-                    fig.add_trace(go.Scatter(
-                        x=dates, y=rolling,
-                        mode="lines",
-                        line=dict(color="rgba(168,168,179,0.5)", width=2, dash="dash"),
-                        name="3-Wk Rolling Avg",
-                        hoverinfo="skip",
-                    ))
 
                 fig.update_layout(
                     title=f"{display_name} - {rolling_metric} (12 Weeks)",
@@ -1265,9 +1279,9 @@ elif active_game == "Overwatch 2":
                 dub_score = ow2_dub_scores.get(name)
                 circle_html = score_circle_html(dub_score, "Dub Score")
 
-                _supreme_ribbon_ow = '<div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#ffd700,#ffaa00);color:#1a1a2e;padding:2px 12px;border-radius:10px;font-size:0.55rem;font-weight:800;letter-spacing:0.5px;white-space:nowrap;z-index:1;">SUPREME LEADER</div>' if is_supreme else ''
+                _supreme_ribbon_ow = '<div style="position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#ffd700,#ffaa00);color:#1a1a2e;padding:2px 12px;border-radius:10px;font-size:0.55rem;font-weight:800;letter-spacing:0.5px;white-space:nowrap;z-index:1;">SUPREME LEADER</div>' if is_supreme else ''
                 ow2_cards_html.append(f"""
-                <div class="battle-card" style="position:relative;{'border-color:#ffd700;box-shadow:0 0 12px rgba(255,215,0,0.3);margin-top:10px;' if is_supreme else ''}">
+                <div class="battle-card" style="position:relative;margin-top:14px;{'border-color:#ffd700;box-shadow:0 0 12px rgba(255,215,0,0.3);' if is_supreme else ''}">
                     {_supreme_ribbon_ow}
                     {avatar_html}
                     <div class="player-name">{username}</div>
