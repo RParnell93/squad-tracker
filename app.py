@@ -928,7 +928,9 @@ if active_game == "Fortnite":
             # Game Mode Breakdown
             st.markdown("---")
             st.markdown("## Game Mode Breakdown")
-            mode_tab_sel = st.selectbox("Select Mode", ["Overall", "Solo", "Duo", "Trio", "Squad", "LTM"], key="fn_mode")
+            mode_tab_sel = st.segmented_control("Mode", ["Overall", "Solo", "Duo", "Trio", "Squad", "LTM"], default="Overall", key="fn_mode", label_visibility="collapsed")
+            if not mode_tab_sel:
+                mode_tab_sel = "Overall"
             mk = mode_tab_sel.lower()
             table_data = []
             for name in names:
