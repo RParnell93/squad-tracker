@@ -447,15 +447,15 @@ with fn_tab:
                     </div>
                     <div style="display: flex; justify-content: space-around; margin-bottom: 16px;">
                         <div class="big-stat"><div class="big-stat-value">{kd:.2f}</div><div class="big-stat-label">K/D</div></div>
-                        <div class="big-stat"><div class="big-stat-value">{wr:.1f}%</div><div class="big-stat-label">Win Rate</div></div>
-                        <div class="big-stat"><div class="big-stat-value">{wins:,}</div><div class="big-stat-label">Wins</div></div>
+                        <div class="big-stat"><div class="big-stat-value">{wins:,} <span style="font-size:0.5em;color:#90caf9;">({wr:.1f}%)</span></div><div class="big-stat-label">Dubs</div></div>
+                        <div class="big-stat"><div class="big-stat-value">{kpm:.2f}</div><div class="big-stat-label">Kills/Match</div></div>
                     </div>
                     <div class="stat-row"><span class="stat-label">Matches</span><span class="stat-value">{matches:,}</span></div>
+                    <div class="stat-row"><span class="stat-label">Dubs</span><span class="stat-highlight">{wins:,} <span style="color:#90caf9;">({wr:.1f}%)</span>{wr_badge}</span></div>
                     <div class="stat-row"><span class="stat-label">Total Kills</span><span class="stat-highlight">{kills:,}{kills_badge}</span></div>
                     <div class="stat-row"><span class="stat-label">Deaths</span><span class="stat-value">{deaths:,}</span></div>
                     <div class="stat-row"><span class="stat-label">K/D Ratio</span><span class="stat-highlight">{kd:.2f}{kd_badge}</span></div>
                     <div class="stat-row"><span class="stat-label">Kills / Match</span><span class="stat-highlight">{kpm:.2f}{kpm_badge}</span></div>
-                    <div class="stat-row"><span class="stat-label">Win Rate</span><span class="stat-highlight">{wr:.1f}%{wr_badge}</span></div>
                     <div class="stat-row"><span class="stat-label">Score</span><span class="stat-value">{score:,}</span></div>
                     <div class="stat-row"><span class="stat-label">Score / Min</span><span class="stat-value">{spm:.1f}</span></div>
                     <div class="stat-row"><span class="stat-label">Score / Match</span><span class="stat-value">{spmatch:.1f}</span></div>
