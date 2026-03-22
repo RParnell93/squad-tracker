@@ -419,26 +419,24 @@ if active_game == "Fortnite":
 
             # Known Fortnite seasons (date ranges for Epic Stats Proxy lookup)
             FORTNITE_SEASONS = {
-                "Ch6 S2 (Current)": (date(2026, 3, 8), date.today()),
-                "Ch6 S1": (date(2025, 12, 1), date(2026, 3, 7)),
-                "Ch5 S4 (Remix)": (date(2025, 9, 27), date(2025, 11, 30)),
-                "Ch5 S3": (date(2025, 6, 14), date(2025, 9, 26)),
-                "Ch5 S2": (date(2025, 3, 8), date(2025, 6, 13)),
-                "Ch5 S1": (date(2024, 12, 3), date(2025, 3, 7)),
+                "C6S2": (date(2026, 3, 8), date.today()),
+                "C6S1": (date(2025, 12, 1), date(2026, 3, 7)),
+                "C5S4": (date(2025, 9, 27), date(2025, 11, 30)),
+                "C5S3": (date(2025, 6, 14), date(2025, 9, 26)),
+                "C5S2": (date(2025, 3, 8), date(2025, 6, 13)),
+                "C5S1": (date(2024, 12, 3), date(2025, 3, 7)),
             }
 
             epic_ids = st.session_state.get("epic_ids", {})
 
             if time_window == "Season":
-                season_col, _ = st.columns([1, 2])
-                with season_col:
-                    season_pick = st.segmented_control(
-                        "Select Season", list(FORTNITE_SEASONS.keys()),
-                        default=list(FORTNITE_SEASONS.keys())[0],
-                        key="fn_season_select"
-                    )
-                    if not season_pick:
-                        season_pick = list(FORTNITE_SEASONS.keys())[0]
+                season_pick = st.segmented_control(
+                    "Select Season", list(FORTNITE_SEASONS.keys()),
+                    default=list(FORTNITE_SEASONS.keys())[0],
+                    key="fn_season_select"
+                )
+                if not season_pick:
+                    season_pick = list(FORTNITE_SEASONS.keys())[0]
                 start_date, end_date = FORTNITE_SEASONS[season_pick]
 
                 # Resolve Epic IDs on demand for Season lookup
