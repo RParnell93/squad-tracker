@@ -21,7 +21,7 @@ from api import (
     search_ow2_player, fetch_ow2_stats,
 )
 from metrics import (
-    SCORE_CURVES, PERCENTILE_CURVES, value_to_percentile, pct_color,
+    SCORE_CURVES, PERCENTILE_CURVES, OW2_CURVES, value_to_percentile, pct_color,
     perf_score, ow2_perf_score, score_color, score_circle_html,
 )
 from helpers import get_fortnite_api_key, load_squad, save_squad
@@ -545,6 +545,25 @@ if active_game == "Fortnite":
                     )
             fn_supreme = max(fn_composite, key=fn_composite.get) if fn_composite and max(fn_composite.values()) > 0 else None
 
+            # Mini percentile bar for battle cards
+            _pct_map = {"K/D": "K/D", "Win%": "Win Rate", "K/M": "Kills/Match", "Out/M": "Outlived/Match"}
+            def _mini_pct_bar(label, value, matches):
+                if not matches:
+                    return ""
+                curve_name = _pct_map.get(label)
+                if not curve_name or curve_name not in PERCENTILE_CURVES:
+                    return ""
+                pct = max(0, min(100, round(value_to_percentile(value, PERCENTILE_CURVES[curve_name]))))
+                color = pct_color(pct)
+                bar_w = max(pct, 3)
+                return f'''<div style="display:flex;align-items:center;margin-bottom:3px;">
+                    <div style="width:38px;font-size:0.6em;color:#a8a8b3;flex-shrink:0;">{label}</div>
+                    <div style="flex:1;background:#0f1923;border-radius:4px;height:12px;position:relative;">
+                        <div style="width:{bar_w}%;height:100%;background:{color};border-radius:4px;"></div>
+                    </div>
+                    <div style="width:26px;text-align:right;font-size:0.55em;color:white;font-weight:700;flex-shrink:0;">{pct}</div>
+                </div>'''
+
             # Battle Cards - Supreme Leader first
             st.markdown("## Battle Cards")
             fn_card_order = sorted(all_fn.keys(), key=lambda n: perf_scores.get(n, (0, 0))[0] or 0, reverse=True)
@@ -614,6 +633,10 @@ if active_game == "Fortnite":
                     <div class="stat-row"><span class="stat-label">Outlived / Match</span><span class="stat-value">{opm}</span></div>
                     <div class="stat-row"><span class="stat-label">Hours Played</span><span class="stat-value">{hours:,.1f}</span></div>
                     {'<div class="stat-row"><span class="stat-label">Last Active</span><span class="stat-value">' + last_on + '</span></div>' if last_on else ''}
+                    <div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);">
+                        <div style="font-size:0.6em;color:#a8a8b3;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Percentiles</div>
+                        {"".join(_mini_pct_bar(sn, sv, matches) for sn, sv in [("K/D", kd), ("Win%", wr), ("K/M", kpm), ("Out/M", opm)])}
+                    </div>
                 </div>""")
 
             # Render all cards in a scrollable row
@@ -774,12 +797,17 @@ if active_game == "Fortnite":
                     name=display_name,
                     hovertemplate="%{x|%b %d}<br>" + rolling_metric + ": %{y}<extra></extra>",
                 ))
-                if not metric_info.get("cumulative"):
+                if not metric_info.get("cumulative") and len(values) >= 3:
+                    # 3-week rolling average
+                    rolling = []
+                    for i in range(len(values)):
+                        window = values[max(0, i - 2):i + 1]
+                        rolling.append(sum(window) / len(window))
                     fig.add_trace(go.Scatter(
-                        x=[dates[0], dates[-1]], y=[avg_val, avg_val],
+                        x=dates, y=rolling,
                         mode="lines",
-                        line=dict(color="rgba(168,168,179,0.4)", width=1, dash="dot"),
-                        name=f"Avg: {metric_info['fmt'](avg_val)}",
+                        line=dict(color="rgba(168,168,179,0.5)", width=2, dash="dash"),
+                        name="3-Wk Rolling Avg",
                         hoverinfo="skip",
                     ))
 
@@ -798,70 +826,6 @@ if active_game == "Fortnite":
                 st.plotly_chart(fig, width="stretch")
 
             render_player_trend()
-
-            # Percentile Rankings (click to expand per player)
-            st.markdown("---")
-            st.markdown("## Percentile Rankings")
-            st.caption("Estimated global percentiles based on community benchmarks. Higher = better among all Fortnite players.")
-
-            # Single player selector for percentile view
-            pct_col, _ = st.columns([1, 2])
-            with pct_col:
-                pct_player = st.selectbox(
-                    "Select Player", names,
-                    format_func=lambda n: all_fn[n]["account"]["name"],
-                    key="pct_player_select"
-                )
-
-            o = player_mode(pct_player)
-            if o and o.get("matches", 0):
-                display = all_fn[pct_player]["account"]["name"]
-                m = max(o.get("matches", 1) or 1, 1)
-
-                stats_for_pct = {
-                    "K/D": o.get("kd", 0) or 0,
-                    "Win Rate": o.get("winRate", 0) or 0,
-                    "Kills/Match": o.get("killsPerMatch", 0) or 0,
-                    "Score/Match": o.get("scorePerMatch", 0) or 0,
-                    "Outlived/Match": (o.get("playersOutlived", 0) or 0) / m,
-                }
-
-                bars_html = ""
-                for stat_name, stat_val in stats_for_pct.items():
-                    pct = value_to_percentile(stat_val, PERCENTILE_CURVES[stat_name])
-                    pct = max(0, min(100, round(pct)))
-                    color = pct_color(pct)
-                    # Cap display width so circle doesn't overflow
-                    bar_width = min(pct, 96)
-                    if stat_name == "Win Rate":
-                        val_str = f"{stat_val:.1f}%"
-                    elif stat_name in ("K/D", "Kills/Match"):
-                        val_str = f"{stat_val:.2f}"
-                    else:
-                        val_str = f"{stat_val:.1f}"
-
-                    bars_html += f"""
-                    <div style="display:flex;align-items:center;margin-bottom:8px;">
-                        <div style="width:clamp(70px,25vw,110px);font-size:clamp(0.65em,2vw,0.8em);color:#a8a8b3;flex-shrink:0;">{stat_name}</div>
-                        <div style="flex:1;background:#1a1a2e;border-radius:8px;height:24px;position:relative;min-width:0;">
-                            <div style="width:{bar_width}%;height:100%;background:{color};border-radius:8px;"></div>
-                            <div style="position:absolute;left:clamp(14px,{bar_width}%,calc(100% - 14px));top:50%;transform:translate(-50%,-50%);background:{color};color:white;font-size:0.65em;font-weight:800;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;border:2px solid white;">{pct}</div>
-                        </div>
-                        <div style="width:clamp(40px,12vw,55px);text-align:right;font-size:clamp(0.65em,2vw,0.8em);color:white;font-weight:700;flex-shrink:0;padding-left:4px;">{val_str}</div>
-                    </div>"""
-
-                st.html(f"""
-                <style>@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&display=swap');</style>
-                <div style="font-family:'JetBrains Mono',monospace;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);border-radius:12px;padding:clamp(10px,3vw,16px);border:1px solid #e94560;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                        <span style="color:#a8a8b3;font-size:0.7em;text-transform:uppercase;letter-spacing:0.5px;">POOR</span>
-                        <span style="color:#a8a8b3;font-size:0.7em;text-transform:uppercase;letter-spacing:0.5px;">AVERAGE</span>
-                        <span style="color:#a8a8b3;font-size:0.7em;text-transform:uppercase;letter-spacing:0.5px;">GREAT</span>
-                    </div>
-                    {bars_html}
-                    <div style="margin-top:8px;font-size:0.65em;color:#666;">Estimated percentiles based on community benchmarks. Not official Epic data.</div>
-                </div>
-                """)
 
             # Charts
             st.markdown("---")
@@ -1223,6 +1187,23 @@ elif active_game == "Overwatch 2":
             # Sort cards by Dub Score (Supreme Leader first)
             ow2_card_order = sorted(all_ow2.keys(), key=lambda n: ow2_dub_scores.get(n) or 0, reverse=True)
 
+            # OW2 mini percentile bar for battle cards
+            _ow2_pct_map = {"KDA": "kda", "Win%": "winRate", "Elims": "avgElims", "Dmg": "avgDamage"}
+            def _mini_pct_bar_ow2(label, value):
+                curve_key = _ow2_pct_map.get(label)
+                if not curve_key or curve_key not in OW2_CURVES:
+                    return ""
+                pct = max(0, min(100, round(value_to_percentile(value, OW2_CURVES[curve_key]))))
+                color = pct_color(pct)
+                bar_w = max(pct, 3)
+                return f'''<div style="display:flex;align-items:center;margin-bottom:3px;">
+                    <div style="width:38px;font-size:0.6em;color:#a8a8b3;flex-shrink:0;">{label}</div>
+                    <div style="flex:1;background:#0f1923;border-radius:4px;height:12px;position:relative;">
+                        <div style="width:{bar_w}%;height:100%;background:{color};border-radius:4px;"></div>
+                    </div>
+                    <div style="width:26px;text-align:right;font-size:0.55em;color:white;font-weight:700;flex-shrink:0;">{pct}</div>
+                </div>'''
+
             # Battle Cards
             st.markdown("## Battle Cards")
             ow2_cards_html = []
@@ -1309,6 +1290,10 @@ elif active_game == "Overwatch 2":
                     <div class="stat-row"><span class="stat-label">Total Damage</span><span class="stat-value">{total.get('damage', 0):,}</span></div>
                     <div class="stat-row"><span class="stat-label">Total Healing</span><span class="stat-value">{total.get('healing', 0):,}</span></div>
                     <div class="stat-row"><span class="stat-label">Hours Played</span><span class="stat-value">{hours:,.1f}</span></div>
+                    <div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);">
+                        <div style="font-size:0.6em;color:#a8a8b3;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Percentiles</div>
+                        {"".join(_mini_pct_bar_ow2(sn, sv) for sn, sv in [("KDA", kda), ("Win%", winrate), ("Elims", avg.get('eliminations', 0) or 0), ("Dmg", avg.get('damage', 0) or 0)])}
+                    </div>
                 </div>""")
 
             ow2_cards_joined = "".join(ow2_cards_html)
