@@ -767,11 +767,11 @@ with fn_tab:
             # AI Weekly Summary (always uses 7-day data)
             has_anthropic_key = False
             try:
-                has_anthropic_key = bool(st.secrets.get("ANTHROPIC_API_KEY"))
-            except Exception:
+                has_anthropic_key = bool(st.secrets["ANTHROPIC_API_KEY"])
+            except (KeyError, FileNotFoundError, Exception):
                 pass
 
-            if has_anthropic_key and epic_ids:
+            if has_anthropic_key:
                 st.markdown("---")
                 st.markdown("## AI Weekly Summary")
                 st.caption("Powered by Claude. Based on the last 7 days of stats for all squad members.")
