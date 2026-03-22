@@ -27,7 +27,7 @@ from metrics import (
 from helpers import get_fortnite_api_key, load_squad, save_squad
 from db import fetch_weekly_trends, fetch_player_cache, fetch_ow2_cache, get_all_week_ranges, HAS_DUCKDB
 
-st.set_page_config(page_title="Squad Tracker", page_icon="🎮", layout="wide")
+st.set_page_config(page_title="Squad Stats", page_icon="🎮", layout="wide")
 
 PLOTLY_CONFIG = {
     "displayModeBar": False,
@@ -167,7 +167,7 @@ _logo_svg = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width
   <line x1="30" y1="20" x2="39" y2="20" stroke="#e94560" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
 </svg>'''
 st.markdown(
-    f'<h1 style="display:flex;align-items:center;margin-bottom:0;">{_logo_svg}<span>SQUAD TRACKER</span></h1>',
+    f'<h1 style="display:flex;align-items:center;margin-bottom:0;">{_logo_svg}<span>SQUAD STATS</span></h1>',
     unsafe_allow_html=True,
 )
 
