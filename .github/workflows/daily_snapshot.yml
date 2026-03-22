@@ -1,8 +1,8 @@
-name: Weekly Stats Snapshot
+name: Daily Stats Snapshot
 
 on:
   schedule:
-    - cron: '0 8 * * 1'  # 8am UTC Monday (3am EST) - captures the prior week
+    - cron: '0 11 * * *'  # 11am UTC = 7am EDT daily
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
@@ -18,7 +18,7 @@ jobs:
       - name: Install dependencies
         run: pip install requests duckdb==1.4.4
 
-      - name: Run weekly snapshot
+      - name: Run snapshot (current + prior week)
         env:
           MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
-        run: python snapshot.py
+        run: python snapshot.py --backfill 2

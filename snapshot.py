@@ -149,11 +149,13 @@ def snapshot(num_weeks=1):
     for week_start, week_end in weeks:
         print(f"\n--- {week_start} to {week_end} ---")
         for name, aid in ids.items():
+            # For the current (incomplete) week, always update. For past weeks, skip if stored.
+            is_current_week = week_end >= date.today() - timedelta(days=6)
             existing = con.execute(
                 "SELECT 1 FROM weekly_stats WHERE player_name = ? AND week_start = ?",
                 [name, week_start]
             ).fetchone()
-            if existing:
+            if existing and not is_current_week:
                 print(f"  {name}: already stored, skipping")
                 continue
 
@@ -162,16 +164,31 @@ def snapshot(num_weeks=1):
                 print(f"  {name}: no games played")
                 continue
 
-            con.execute("""
-                INSERT INTO weekly_stats (player_name, epic_account_id, week_start, week_end,
-                    kills, deaths, wins, matches, score, players_outlived, minutes_played,
-                    kd, kills_per_match, win_rate)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, [name, aid, week_start, week_end,
-                  stats["kills"], stats["deaths"], stats["wins"], stats["matches"],
-                  stats["score"], stats["players_outlived"], stats["minutes_played"],
-                  stats["kd"], stats["kills_per_match"], stats["win_rate"]])
-            print(f"  {name}: {stats['matches']} matches, K/D {stats['kd']}, Win% {stats['win_rate']}")
+            if existing:
+                # Update current week's running totals
+                con.execute("""
+                    UPDATE weekly_stats SET
+                        kills = ?, deaths = ?, wins = ?, matches = ?, score = ?,
+                        players_outlived = ?, minutes_played = ?,
+                        kd = ?, kills_per_match = ?, win_rate = ?,
+                        created_at = current_timestamp
+                    WHERE player_name = ? AND week_start = ?
+                """, [stats["kills"], stats["deaths"], stats["wins"], stats["matches"],
+                      stats["score"], stats["players_outlived"], stats["minutes_played"],
+                      stats["kd"], stats["kills_per_match"], stats["win_rate"],
+                      name, week_start])
+                print(f"  {name}: updated - {stats['matches']} matches, K/D {stats['kd']}, Win% {stats['win_rate']}")
+            else:
+                con.execute("""
+                    INSERT INTO weekly_stats (player_name, epic_account_id, week_start, week_end,
+                        kills, deaths, wins, matches, score, players_outlived, minutes_played,
+                        kd, kills_per_match, win_rate)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, [name, aid, week_start, week_end,
+                      stats["kills"], stats["deaths"], stats["wins"], stats["matches"],
+                      stats["score"], stats["players_outlived"], stats["minutes_played"],
+                      stats["kd"], stats["kills_per_match"], stats["win_rate"]])
+                print(f"  {name}: {stats['matches']} matches, K/D {stats['kd']}, Win% {stats['win_rate']}")
             time.sleep(0.5)
 
     con.close()

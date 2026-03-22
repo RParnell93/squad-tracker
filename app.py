@@ -550,7 +550,7 @@ with fn_tab:
 
                     if db_data is not None:
                         # DB path: use stored weekly data, fetch current week live
-                        st.caption("Source: MotherDuck (historical) + Live API (current week)")
+                        st.caption("Source: MotherDuck")
 
                         # Fetch current week (since last Monday) via API if not cached
                         today = date.today()
