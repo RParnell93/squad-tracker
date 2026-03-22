@@ -753,6 +753,79 @@ with fn_tab:
                 st.dataframe(table_data, use_container_width=True, hide_index=True)
 
 
+            # AI Weekly Summary (always uses 7-day data)
+            has_anthropic_key = False
+            try:
+                has_anthropic_key = bool(st.secrets.get("ANTHROPIC_API_KEY"))
+            except Exception:
+                pass
+
+            if has_anthropic_key and epic_ids:
+                st.markdown("---")
+                st.markdown("## AI Weekly Summary")
+                st.caption("Powered by Claude. Based on the last 7 days of stats for all squad members.")
+
+                # Build stats context from 7-day cache
+                summary_lines = []
+                for name in names:
+                    aid = epic_ids.get(name)
+                    if not aid:
+                        continue
+                    s7 = st.session_state.get("epic_cache", {}).get(f"epic_{aid}_7")
+                    if not s7:
+                        continue
+                    o7 = s7.get("all", {}).get("overall", {})
+                    if not o7 or not o7.get("matches", 0):
+                        continue
+                    display = all_fn[name]["account"]["name"]
+                    summary_lines.append(
+                        f"{display}: {o7.get('matches', 0)} matches, "
+                        f"{o7.get('kills', 0)} kills, "
+                        f"K/D {o7.get('kd', 0):.2f}, "
+                        f"Win Rate {o7.get('winRate', 0):.1f}%, "
+                        f"Kills/Match {o7.get('killsPerMatch', 0):.2f}, "
+                        f"Score/Match {o7.get('scorePerMatch', 0):.0f}, "
+                        f"Players Outlived {o7.get('playersOutlived', 0)}, "
+                        f"Top 10s {o7.get('top10', 0)}, "
+                        f"Hours {round((o7.get('minutesPlayed', 0) or 0) / 60, 1)}"
+                    )
+
+                if summary_lines:
+                    stats_block = "\n".join(summary_lines)
+                    cache_key = f"ai_summary_{hash(stats_block)}"
+
+                    if cache_key not in st.session_state:
+                        with st.spinner("Generating weekly summary..."):
+                            try:
+                                import anthropic
+                                client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
+                                resp = client.messages.create(
+                                    model="claude-haiku-4-5-20251001",
+                                    max_tokens=600,
+                                    messages=[{
+                                        "role": "user",
+                                        "content": f"""You are a Fortnite squad analyst writing a fun, concise weekly recap for a friend group.
+Here are the last 7 days of stats for each squad member:
+
+{stats_block}
+
+Write a 3-5 paragraph weekly summary that:
+- Calls out the MVP of the week and why
+- Highlights any standout performances or funny stats (like someone dying a lot or barely playing)
+- Gives a playful roast or shoutout to specific players
+- Ends with a bold prediction or challenge for next week
+- Keep it casual and fun, like a group chat message. Use their display names.
+- No emojis. Keep it under 200 words."""
+                                    }]
+                                )
+                                st.session_state[cache_key] = resp.content[0].text
+                            except Exception as e:
+                                st.session_state[cache_key] = f"Could not generate summary: {e}"
+
+                    st.markdown(st.session_state[cache_key])
+                else:
+                    st.caption("No 7-day data available for AI summary.")
+
             # Data Definitions
             st.markdown("---")
             with st.expander("Data Definitions"):
