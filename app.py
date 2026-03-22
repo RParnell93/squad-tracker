@@ -413,7 +413,9 @@ if active_game == "Fortnite":
             time_options = ["7 Days", "30 Days", "Lifetime", "Season"]
             if has_epic:
                 time_options.append("Custom")
-            time_window = st.radio("Time Window", time_options, horizontal=True, key="fn_time_window")
+            time_window = st.segmented_control("Time Window", time_options, default="7 Days", key="fn_time_window")
+            if not time_window:
+                time_window = "7 Days"
 
             # Known Fortnite seasons (date ranges for Epic Stats Proxy lookup)
             FORTNITE_SEASONS = {
@@ -430,10 +432,13 @@ if active_game == "Fortnite":
             if time_window == "Season":
                 season_col, _ = st.columns([1, 2])
                 with season_col:
-                    season_pick = st.selectbox(
+                    season_pick = st.segmented_control(
                         "Select Season", list(FORTNITE_SEASONS.keys()),
+                        default=list(FORTNITE_SEASONS.keys())[0],
                         key="fn_season_select"
                     )
+                    if not season_pick:
+                        season_pick = list(FORTNITE_SEASONS.keys())[0]
                 start_date, end_date = FORTNITE_SEASONS[season_pick]
 
                 # Resolve Epic IDs on demand for Season lookup
@@ -679,12 +684,13 @@ if active_game == "Fortnite":
                     "Hours Played": {"key": "minutes_played", "fmt": lambda v: round(v / 60, 1), "axis": "Hours Played"},
                 }
 
-                col_metric, _ = st.columns([1, 2])
-                with col_metric:
-                    selected_metric = st.selectbox(
-                        "Trend Metric", list(TREND_METRICS.keys()), index=0,
-                        key="trend_metric_select"
-                    )
+                _trend_opts = list(TREND_METRICS.keys())
+                selected_metric = st.segmented_control(
+                    "Trend Metric", _trend_opts, default=_trend_opts[0],
+                    key="trend_metric_select"
+                )
+                if not selected_metric:
+                    selected_metric = _trend_opts[0]
                 metric_info = TREND_METRICS[selected_metric]
 
                 st.markdown(f"## {selected_metric} Trend (Past 12 Weeks)")
@@ -769,18 +775,23 @@ if active_game == "Fortnite":
                     "Win Rate": {"key": "win_rate", "fmt": lambda v: round(v, 1), "axis": "Win Rate %"},
                 }
 
+                _dd_display = [all_fn[n]["account"]["name"] for n in names]
+                _dd_map = dict(zip(_dd_display, names))
                 col_player, col_metric, _ = st.columns([1, 1, 1])
                 with col_player:
-                    rolling_player = st.selectbox(
-                        "Player", names,
-                        format_func=lambda n: all_fn[n]["account"]["name"],
+                    _dd_pick = st.segmented_control(
+                        "Player", _dd_display, default=_dd_display[0],
                         key="player_trend_select",
                     )
+                    rolling_player = _dd_map.get(_dd_pick, names[0])
+                _pm_opts = list(PLAYER_METRICS.keys())
                 with col_metric:
-                    rolling_metric = st.selectbox(
-                        "Stat", list(PLAYER_METRICS.keys()), index=1,
+                    rolling_metric = st.segmented_control(
+                        "Stat", _pm_opts, default=_pm_opts[1],
                         key="player_metric_select",
                     )
+                    if not rolling_metric:
+                        rolling_metric = _pm_opts[1]
 
                 metric_info = PLAYER_METRICS[rolling_metric]
 
@@ -1425,7 +1436,9 @@ elif active_game == "Overwatch 2":
             @st.fragment
             def hero_breakdown():
                 st.markdown("## Hero Breakdown")
-                hero_player = st.selectbox("Select Player", ow2_display, key="ow2_hero_player")
+                hero_player = st.segmented_control("Select Player", ow2_display, default=ow2_display[0], key="ow2_hero_player")
+                if not hero_player:
+                    hero_player = ow2_display[0]
                 hero_player_key = ow2_names[ow2_display.index(hero_player)]
                 heroes = all_ow2[hero_player_key].get("stats", {}).get("heroes", {})
                 if heroes:
