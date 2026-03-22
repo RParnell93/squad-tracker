@@ -87,6 +87,8 @@ CSS = """
         font-family: 'JetBrains Mono', monospace !important;
         letter-spacing: -0.5px;
     }
+    h2, .stApp h2 { font-size: 1.3em; }
+    h3, .stApp h3 { font-size: 1.05em; }
     /* Inputs and selects */
     input, select, textarea, button,
     [data-testid="stTextInput"] input,
