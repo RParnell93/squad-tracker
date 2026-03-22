@@ -1429,9 +1429,15 @@ elif active_game == "Overwatch 2":
                 if top5:
                     fig = go.Figure()
                     fig.add_trace(go.Bar(name="Avg Elims", x=[h["Hero"] for h in top5], y=[h["Avg Elims"] for h in top5], marker_color="#f99e1a"))
-                    fig.add_trace(go.Bar(name="KDA", x=[h["Hero"] for h in top5], y=[h["KDA"] for h in top5], marker_color="#e94560"))
-                    fig.update_layout(title=f"{hero_player}'s Top 5 Heroes", barmode="group", template="plotly_dark",
-                                      plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80))
+                    fig.add_trace(go.Scatter(name="KDA", x=[h["Hero"] for h in top5], y=[h["KDA"] for h in top5],
+                                             mode="lines+markers+text", text=[f"{h['KDA']:.2f}" for h in top5], textposition="top center",
+                                             textfont=dict(size=11, color="#e94560"),
+                                             line=dict(color="#e94560", width=2.5), marker=dict(size=8, color="#e94560"),
+                                             yaxis="y2"))
+                    fig.update_layout(title=f"{hero_player}'s Top 5 Heroes", template="plotly_dark",
+                                      plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350,
+                                      font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80),
+                                      yaxis=dict(title="Avg Elims"), yaxis2=dict(title="KDA", overlaying="y", side="right", showgrid=False))
                     st.plotly_chart(fig, width="stretch")
             else:
                 st.caption("No hero data available for this player.")
