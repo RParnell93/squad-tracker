@@ -1,7 +1,14 @@
+import os
 import streamlit as st
 import time
 from datetime import date, datetime, timedelta
 import plotly.graph_objects as go
+
+try:
+    import anthropic
+    HAS_ANTHROPIC = True
+except ImportError:
+    HAS_ANTHROPIC = False
 from epic_auth import (
     load_tokens, load_device_auth, get_valid_token, lookup_account_by_name,
     stats_for_window, fetch_stats_epic, parse_raw_stats,
@@ -376,12 +383,6 @@ with fn_tab:
                     return stats["all"].get("overall", {}) or {}
                 return stats["all"].get(mode, {}) or {}
 
-            # Rankings
-            best_kd = max((player_mode(n).get("kd", 0) or 0) for n in names)
-            best_wr = max((player_mode(n).get("winRate", 0) or 0) for n in names)
-            best_kills = max((player_mode(n).get("kills", 0) or 0) for n in names)
-            best_kpm = max((player_mode(n).get("killsPerMatch", 0) or 0) for n in names)
-
             # Compute 7d and 30d performance scores per player
             perf_scores = {}
             for name in all_fn:
@@ -392,6 +393,14 @@ with fn_tab:
                     perf_scores[name] = (perf_score(s7), perf_score(s30))
                 else:
                     perf_scores[name] = (None, None)
+
+            # Rankings - only among players with recent activity (both dub scores > 0)
+            active_names = [n for n in names if perf_scores.get(n, (None, None))[0] is not None
+                            and perf_scores[n][0] > 0 and perf_scores[n][1] is not None and perf_scores[n][1] > 0]
+            best_kd = max((player_mode(n).get("kd", 0) or 0 for n in active_names), default=0)
+            best_wr = max((player_mode(n).get("winRate", 0) or 0 for n in active_names), default=0)
+            best_kills = max((player_mode(n).get("kills", 0) or 0 for n in active_names), default=0)
+            best_kpm = max((player_mode(n).get("killsPerMatch", 0) or 0 for n in active_names), default=0)
 
             # Supreme Leader - best composite score, must have played in the last 7 days
             fn_composite = {}
@@ -439,11 +448,11 @@ with fn_tab:
                 last_on = (overall.get("lastModified", "") or "")[:10]
 
                 s7, s30 = perf_scores.get(name, (None, None))
-                has_recent = s7 is not None and s7 > 0 and s30 is not None and s30 > 0
-                kd_badge = ' <span class="rank-badge">BEST</span>' if has_recent and kd == best_kd and len(all_fn) > 1 and kd > 0 else ""
-                wr_badge = ' <span class="rank-badge">BEST</span>' if has_recent and wr == best_wr and len(all_fn) > 1 and wr > 0 else ""
-                kills_badge = ' <span class="rank-badge">BEST</span>' if has_recent and kills == best_kills and len(all_fn) > 1 and kills > 0 else ""
-                kpm_badge = ' <span class="rank-badge">BEST</span>' if has_recent and kpm == best_kpm and len(all_fn) > 1 and kpm > 0 else ""
+                is_active = name in active_names
+                kd_badge = ' <span class="rank-badge">BEST</span>' if is_active and kd == best_kd and len(all_fn) > 1 and kd > 0 else ""
+                wr_badge = ' <span class="rank-badge">BEST</span>' if is_active and wr == best_wr and len(all_fn) > 1 and wr > 0 else ""
+                kills_badge = ' <span class="rank-badge">BEST</span>' if is_active and kills == best_kills and len(all_fn) > 1 and kills > 0 else ""
+                kpm_badge = ' <span class="rank-badge">BEST</span>' if is_active and kpm == best_kpm and len(all_fn) > 1 and kpm > 0 else ""
 
                 window_label = time_window.upper()
 
@@ -495,9 +504,9 @@ with fn_tab:
                 @st.fragment
                 def render_trend():
                     TREND_METRICS = {
-                        "K/D": {"key": "kd", "fmt": lambda v: round(v, 2), "axis": "K/D Ratio"},
+                        "K/D": {"key": "kd", "fmt": lambda v: round(v, 2), "axis": "K/D Ratio", "max_y": 10},
                         "Win Rate": {"key": "winRate", "fmt": lambda v: round(v, 1), "axis": "Win Rate %"},
-                        "Kills/Match": {"key": "killsPerMatch", "fmt": lambda v: round(v, 2), "axis": "Kills per Match"},
+                        "Kills/Match": {"key": "killsPerMatch", "fmt": lambda v: round(v, 2), "axis": "Kills per Match", "max_y": 10},
                         "Score/Min": {"key": "scorePerMin", "fmt": lambda v: round(v, 1), "axis": "Score per Minute"},
                         "Score/Match": {"key": "scorePerMatch", "fmt": lambda v: round(v, 1), "axis": "Score per Match"},
                         "Top 10": {"key": "top10", "fmt": lambda v: int(v), "axis": "Top 10 Finishes"},
@@ -592,10 +601,12 @@ with fn_tab:
                             name=all_fn[n]["account"]["name"],
                             line=dict(width=3), marker=dict(size=10),
                         ))
+                    y_range = [0, metric_info["max_y"]] if "max_y" in metric_info else None
                     fig.update_layout(
                         template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)",
                         paper_bgcolor="rgba(0,0,0,0)", height=450,
-                        yaxis_title=metric_info["axis"], font=dict(color="white"),
+                        yaxis_title=metric_info["axis"], yaxis_range=y_range,
+                        font=dict(color="white"),
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
                     )
                     st.plotly_chart(fig, use_container_width=True)
@@ -765,61 +776,63 @@ with fn_tab:
 
 
             # AI Weekly Summary (always uses 7-day data)
-            has_anthropic_key = False
-            try:
-                has_anthropic_key = bool(st.secrets["ANTHROPIC_API_KEY"])
-            except (KeyError, FileNotFoundError, Exception):
-                pass
+            if HAS_ANTHROPIC:
+                # Get API key from env first, then Streamlit secrets
+                _anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
+                if not _anthropic_key:
+                    try:
+                        _anthropic_key = st.secrets.get("ANTHROPIC_API_KEY", "")
+                    except Exception:
+                        _anthropic_key = ""
 
-            if has_anthropic_key:
-                st.markdown("---")
-                st.markdown("## AI Weekly Summary")
-                st.caption("Powered by Claude. Based on the last 7 days of stats for all squad members.")
+                if _anthropic_key:
+                    st.markdown("---")
+                    st.markdown("## AI Weekly Summary")
+                    st.caption("Powered by Claude. Based on the last 7 days of stats for all squad members.")
 
-                # Build stats context from 7-day cache
-                summary_lines = []
-                for name in names:
-                    aid = epic_ids.get(name)
-                    if not aid:
-                        continue
-                    s7 = st.session_state.get("epic_cache", {}).get(f"epic_{aid}_7")
-                    if not s7:
-                        continue
-                    o7 = s7.get("all", {}).get("overall", {})
-                    if not o7 or not o7.get("matches", 0):
-                        continue
-                    display = all_fn[name]["account"]["name"]
-                    summary_lines.append(
-                        f"{display}: {o7.get('matches', 0)} matches, "
-                        f"{o7.get('kills', 0)} kills, "
-                        f"K/D {o7.get('kd', 0):.2f}, "
-                        f"Win Rate {o7.get('winRate', 0):.1f}%, "
-                        f"Kills/Match {o7.get('killsPerMatch', 0):.2f}, "
-                        f"Score/Match {o7.get('scorePerMatch', 0):.0f}, "
-                        f"Players Outlived {o7.get('playersOutlived', 0)}, "
-                        f"Top 10s {o7.get('top10', 0)}, "
-                        f"Hours {round((o7.get('minutesPlayed', 0) or 0) / 60, 1)}"
-                    )
+                    # Build stats context from 7-day cache
+                    summary_lines = []
+                    for name in names:
+                        aid = epic_ids.get(name)
+                        if not aid:
+                            continue
+                        s7_data = st.session_state.get("epic_cache", {}).get(f"epic_{aid}_7")
+                        if not s7_data:
+                            continue
+                        o7 = s7_data.get("all", {}).get("overall", {})
+                        if not o7 or not o7.get("matches", 0):
+                            continue
+                        display = all_fn[name]["account"]["name"]
+                        summary_lines.append(
+                            f"{display}: {o7.get('matches', 0)} matches, "
+                            f"{o7.get('kills', 0)} kills, "
+                            f"K/D {o7.get('kd', 0):.2f}, "
+                            f"Win Rate {o7.get('winRate', 0):.1f}%, "
+                            f"Kills/Match {o7.get('killsPerMatch', 0):.2f}, "
+                            f"Score/Match {o7.get('scorePerMatch', 0):.0f}, "
+                            f"Players Outlived {o7.get('playersOutlived', 0)}, "
+                            f"Top 10s {o7.get('top10', 0)}, "
+                            f"Hours {round((o7.get('minutesPlayed', 0) or 0) / 60, 1)}"
+                        )
 
-                if summary_lines:
-                    stats_block = "\n".join(summary_lines)
-                    cache_key = f"ai_summary_{hash(stats_block)}"
+                    if summary_lines:
+                        stats_block = "\n".join(summary_lines)
+                        cache_key = f"ai_summary_{hash(stats_block)}"
 
-                    col_btn, _ = st.columns([1, 3])
-                    with col_btn:
-                        generate_clicked = st.button("Generate Summary", key="ai_summary_btn", use_container_width=True)
+                        col_btn, _ = st.columns([1, 3])
+                        with col_btn:
+                            generate_clicked = st.button("Generate AI Summary", key="ai_summary_btn", type="primary", use_container_width=True)
 
-                    if generate_clicked and cache_key not in st.session_state:
-                        with st.spinner("Generating weekly summary..."):
-                            try:
-                                import anthropic
-                                client = anthropic.Anthropic(api_key=st.secrets["ANTHROPIC_API_KEY"])
-                                resp = client.messages.create(
-                                    model="claude-haiku-4-5-20251001",
-                                    max_tokens=600,
-                                    messages=[{
-                                        "role": "user",
-                                        "content": f"""You are a Fortnite squad analyst writing a fun, concise weekly recap for a friend group.
+                        if generate_clicked and cache_key not in st.session_state:
+                            with st.spinner("Generating weekly summary..."):
+                                try:
+                                    client = anthropic.Anthropic(api_key=_anthropic_key)
+                                    resp = client.messages.create(
+                                        model="claude-haiku-4-5-20251001",
+                                        max_tokens=600,
+                                        messages=[{
+                                            "role": "user",
+                                            "content": f"""You are a Fortnite squad analyst writing a fun, concise weekly recap for a friend group.
 Here are the last 7 days of stats for each squad member:
 
 {stats_block}
@@ -831,16 +844,16 @@ Write a 3-5 paragraph weekly summary that:
 - Ends with a bold prediction or challenge for next week
 - Keep it casual and fun, like a group chat message. Use their display names.
 - No emojis. Keep it under 200 words."""
-                                    }]
-                                )
-                                st.session_state[cache_key] = resp.content[0].text
-                            except Exception as e:
-                                st.session_state[cache_key] = f"Could not generate summary: {e}"
+                                        }]
+                                    )
+                                    st.session_state[cache_key] = resp.content[0].text
+                                except Exception as e:
+                                    st.session_state[cache_key] = f"Could not generate summary: {e}"
 
-                    if cache_key in st.session_state:
-                        st.markdown(st.session_state[cache_key])
-                else:
-                    st.caption("No 7-day data available for AI summary.")
+                        if cache_key in st.session_state:
+                            st.markdown(st.session_state[cache_key])
+                    else:
+                        st.caption("No 7-day data available for AI summary.")
 
             # Data Definitions
             st.markdown("---")
