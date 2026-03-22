@@ -136,10 +136,16 @@ def create_device_auth(access_token, account_id):
 
 
 def load_device_auth():
-    """Load saved device auth credentials (local file or Streamlit secrets)."""
+    """Load saved device auth credentials (local file, env vars, or Streamlit secrets)."""
     if os.path.exists(DEVICE_AUTH_FILE):
         with open(DEVICE_AUTH_FILE) as f:
             return json.load(f)
+    # Fall back to environment variables (for CI/GitHub Actions)
+    env_account = os.environ.get("EPIC_DEVICE_ACCOUNT_ID", "")
+    env_device = os.environ.get("EPIC_DEVICE_ID", "")
+    env_secret = os.environ.get("EPIC_DEVICE_SECRET", "")
+    if env_account and env_device and env_secret:
+        return {"account_id": env_account, "device_id": env_device, "secret": env_secret}
     # Fall back to Streamlit secrets
     try:
         import streamlit as st

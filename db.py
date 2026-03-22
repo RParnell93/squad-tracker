@@ -93,6 +93,38 @@ def fetch_weekly_trends(player_names, num_weeks=12):
         return None
 
 
+def fetch_player_cache(player_names):
+    """Fetch cached stats from player_cache table.
+
+    Returns dict: {player_name: {"lifetime": data, "7d": data, "30d": data}}
+    Returns None if DB unavailable.
+    """
+    import json
+    con = get_connection()
+    if not con:
+        return None
+    try:
+        rows = con.execute("""
+            SELECT player_name, "window", data_json
+            FROM player_cache
+            WHERE player_name = ANY(?)
+        """, [player_names]).fetchall()
+
+        result = {name: {} for name in player_names}
+        for player_name, window, data_json in rows:
+            if player_name in result:
+                result[player_name][window] = json.loads(data_json)
+        con.close()
+        return result
+    except Exception as e:
+        logger.warning("player_cache query failed: %s", e)
+        try:
+            con.close()
+        except Exception:
+            pass
+        return None
+
+
 def get_all_week_ranges(num_weeks=12):
     """Get the Mon-Sun week ranges for the last num_weeks completed weeks.
     Returns list of (week_start, week_end) tuples, oldest first.

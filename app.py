@@ -24,7 +24,7 @@ from metrics import (
     perf_score, score_color, score_circle_html,
 )
 from helpers import get_fortnite_api_key, load_squad, save_squad
-from db import fetch_weekly_trends, get_all_week_ranges, HAS_DUCKDB
+from db import fetch_weekly_trends, fetch_player_cache, get_all_week_ranges, HAS_DUCKDB
 
 st.set_page_config(page_title="Squad Tracker", page_icon="🎮", layout="wide")
 
@@ -47,8 +47,6 @@ if "squad" not in st.session_state:
     st.session_state.squad["fortnite_players"] = list(DEFAULT_FORTNITE_PLAYERS)
     st.session_state.squad["ow2_players"] = list(DEFAULT_OW2_PLAYERS)
 
-if "fn_cache" not in st.session_state:
-    st.session_state.fn_cache = {}
 if "ow2_cache" not in st.session_state:
     st.session_state.ow2_cache = {}
 
@@ -180,102 +178,73 @@ fn_tab, ow2_tab = st.tabs(["FORTNITE", "OVERWATCH 2"])
 # ═══════════════════════════════════════════════════════════════════════════
 with fn_tab:
     fn_players = st.session_state.squad.get("fortnite_players", [])
-    fn_api_key = get_fortnite_api_key()
-
-    if not fn_api_key:
-        st.warning("Enter your Fortnite API key in the sidebar, or add it to .streamlit/secrets.toml")
-    elif not fn_players:
+    if not fn_players:
         st.info("Add Fortnite players in the sidebar.")
     else:
         if st.button("Refresh Stats", use_container_width=True):
-            st.session_state.fn_cache = {}
+            st.session_state.pop("db_player_cache", None)
+            st.session_state.pop("db_trends", None)
             st.session_state.pop("epic_ids", None)
             st.session_state.pop("epic_cache", None)
-            st.session_state.pop("trend_cache", None)
-            st.session_state.pop("db_trends", None)
 
+        # Load all stats from MotherDuck (populated by daily snapshot)
+        if "db_player_cache" not in st.session_state:
+            with st.spinner("Loading stats..."):
+                _pc = fetch_player_cache([p["name"] for p in fn_players])
+                st.session_state.db_player_cache = _pc if _pc else {}
+
+        db_cache = st.session_state.db_player_cache
         all_fn = {}
+        db_7d = {}
+        db_30d = {}
         for p in fn_players:
-            cache_key = f"{p['name']}_{p['type']}"
-            if cache_key in st.session_state.fn_cache:
-                all_fn[p["name"]] = st.session_state.fn_cache[cache_key]
-            else:
-                with st.spinner(f"Loading {p['name']}..."):
-                    data = fetch_fortnite_stats(p["name"], p["type"], fn_api_key)
-                    if data:
-                        all_fn[p["name"]] = data
-                        st.session_state.fn_cache[cache_key] = data
-                    else:
-                        st.error(f"Could not find **{p['name']}** on {p.get('platform', p['type'])}.")
+            name = p["name"]
+            pc = db_cache.get(name, {})
+            if "lifetime" in pc:
+                all_fn[name] = pc["lifetime"]
+            if "7d" in pc:
+                db_7d[name] = pc["7d"]
+            if "30d" in pc:
+                db_30d[name] = pc["30d"]
 
-        # Resolve Epic account IDs (needed for 7/30 day stats)
-        has_epic = bool(load_tokens() or load_device_auth())
-        if has_epic and "epic_ids" not in st.session_state:
-            with st.spinner("Resolving Epic account IDs..."):
-                epic_ids = {}
-                # Build lookup of hardcoded epic_ids from config
-                config_ids = {p["name"]: p["epic_id"] for p in fn_players if p.get("epic_id")}
-                token = get_valid_token()
-                if token:
-                    for name, data in all_fn.items():
-                        # Use hardcoded ID if available (for players with no Epic display name)
-                        if name in config_ids:
-                            epic_ids[name] = config_ids[name]
-                            continue
-                        display = data.get("account", {}).get("name", name)
-                        result = lookup_account_by_name(display, token)
-                        if result:
-                            epic_ids[name] = result["id"]
-                        time.sleep(0.2)
-                st.session_state.epic_ids = epic_ids
-        elif not has_epic:
-            st.session_state.epic_ids = {}
-
-        if all_fn:
-            epic_ids = st.session_state.get("epic_ids", {})
-
-            # Actual fetch window for "7 Days" - padded to 9 to account for API reporting lag
-            FETCH_7D = 9
-            FETCH_30D = 30
-
+        if not all_fn:
+            st.info("No cached stats available yet. Stats refresh daily at 7am ET.")
+        else:
             # Helper to get stats for the selected time window
             def get_stats(data, name, time_window):
-                if time_window == "Season" and epic_ids.get(name):
-                    # Use Epic Stats Proxy with season date range if available
-                    aid = epic_ids[name]
-                    start_ts = int(datetime.combine(start_date, datetime.min.time()).timestamp())
-                    end_ts = int(datetime.combine(end_date, datetime.max.time()).timestamp())
-                    cache_key = f"epic_{aid}_{start_ts}_{end_ts}"
-                    cached = st.session_state.get("epic_cache", {}).get(cache_key)
-                    if cached is not None:
-                        return cached
-                    # Fall back to fortnite-api.com season stats
+                if time_window == "7 Days":
+                    return db_7d.get(name)
+                if time_window == "30 Days":
+                    return db_30d.get(name)
+                if time_window == "Season":
+                    _eids = st.session_state.get("epic_ids", {})
+                    if _eids.get(name):
+                        aid = _eids[name]
+                        start_ts = int(datetime.combine(start_date, datetime.min.time()).timestamp())
+                        end_ts = int(datetime.combine(end_date, datetime.max.time()).timestamp())
+                        cache_key = f"epic_{aid}_{start_ts}_{end_ts}"
+                        cached = st.session_state.get("epic_cache", {}).get(cache_key)
+                        if cached is not None:
+                            return cached
                     if data.get("season_stats"):
                         return data["season_stats"]
                     return None
-                if time_window == "Season" and data.get("season_stats"):
-                    return data["season_stats"]
-                if time_window in ("7 Days", "30 Days"):
-                    fetch_days = FETCH_7D if time_window == "7 Days" else FETCH_30D
-                    aid = epic_ids.get(name)
-                    if not aid:
-                        return None
-                    cache_key = f"epic_{aid}_{fetch_days}"
-                    return st.session_state.get("epic_cache", {}).get(cache_key)
                 if time_window == "Custom":
-                    aid = epic_ids.get(name)
+                    _eids = st.session_state.get("epic_ids", {})
+                    aid = _eids.get(name)
                     if not aid:
                         return None
                     start_ts = int(datetime.combine(start_date, datetime.min.time()).timestamp())
                     end_ts = int(datetime.combine(end_date, datetime.max.time()).timestamp())
                     cache_key = f"epic_{aid}_{start_ts}_{end_ts}"
                     return st.session_state.get("epic_cache", {}).get(cache_key)
-                return data["stats"]
+                return data.get("stats")  # Lifetime
 
-            # Time window toggle
-            time_options = ["Lifetime", "Season"]
-            if epic_ids:
-                time_options += ["7 Days", "30 Days", "Custom"]
+            # Time window toggle - default to "7 Days"
+            has_epic = bool(load_tokens() or load_device_auth())
+            time_options = ["7 Days", "30 Days", "Lifetime", "Season"]
+            if has_epic:
+                time_options.append("Custom")
             time_window = st.radio("Time Window", time_options, horizontal=True, key="fn_time_window")
 
             # Known Fortnite seasons (date ranges for Epic Stats Proxy lookup)
@@ -288,8 +257,9 @@ with fn_tab:
                 "Ch5 S1": (date(2024, 12, 3), date(2025, 3, 7)),
             }
 
-            custom_days = None
-            if time_window == "Season" and epic_ids:
+            epic_ids = st.session_state.get("epic_ids", {})
+
+            if time_window == "Season":
                 season_col, _ = st.columns([1, 2])
                 with season_col:
                     season_pick = st.selectbox(
@@ -297,6 +267,44 @@ with fn_tab:
                         key="fn_season_select"
                     )
                 start_date, end_date = FORTNITE_SEASONS[season_pick]
+
+                # Resolve Epic IDs on demand for Season lookup
+                if has_epic and not epic_ids:
+                    with st.spinner("Resolving Epic account IDs..."):
+                        _ids = {}
+                        config_ids = {p["name"]: p["epic_id"] for p in fn_players if p.get("epic_id")}
+                        token = get_valid_token()
+                        if token:
+                            for name, data in all_fn.items():
+                                if name in config_ids:
+                                    _ids[name] = config_ids[name]
+                                    continue
+                                display = data.get("account", {}).get("name", name)
+                                result = lookup_account_by_name(display, token)
+                                if result:
+                                    _ids[name] = result["id"]
+                                time.sleep(0.2)
+                        st.session_state.epic_ids = _ids
+                        epic_ids = _ids
+
+                if epic_ids:
+                    if "epic_cache" not in st.session_state:
+                        st.session_state.epic_cache = {}
+                    start_ts = int(datetime.combine(start_date, datetime.min.time()).timestamp())
+                    end_ts = int(datetime.combine(end_date, datetime.max.time()).timestamp())
+                    range_key = f"{start_ts}_{end_ts}"
+                    missing = [n for n in all_fn if epic_ids.get(n) and f"epic_{epic_ids[n]}_{range_key}" not in st.session_state.epic_cache]
+                    if missing:
+                        with st.spinner(f"Loading {season_pick} stats..."):
+                            for name in missing:
+                                aid = epic_ids[name]
+                                parsed_raw = fetch_stats_epic(aid, start_ts, end_ts)
+                                cache_key = f"epic_{aid}_{range_key}"
+                                if parsed_raw:
+                                    st.session_state.epic_cache[cache_key] = epic_parsed_to_mode_stats(parse_raw_stats(parsed_raw))
+                                else:
+                                    st.session_state.epic_cache[cache_key] = None
+                                time.sleep(0.3)
 
             elif time_window == "Custom":
                 col_start, col_end = st.columns(2)
@@ -308,75 +316,43 @@ with fn_tab:
                     st.error("Start date must be before end date.")
                     st.stop()
 
-            # Fetch Epic window stats if needed (batch all players)
-            if "epic_cache" not in st.session_state:
-                st.session_state.epic_cache = {}
+                # Resolve Epic IDs on demand for Custom range
+                if has_epic and not epic_ids:
+                    with st.spinner("Resolving Epic account IDs..."):
+                        _ids = {}
+                        config_ids = {p["name"]: p["epic_id"] for p in fn_players if p.get("epic_id")}
+                        token = get_valid_token()
+                        if token:
+                            for name, data in all_fn.items():
+                                if name in config_ids:
+                                    _ids[name] = config_ids[name]
+                                    continue
+                                display = data.get("account", {}).get("name", name)
+                                result = lookup_account_by_name(display, token)
+                                if result:
+                                    _ids[name] = result["id"]
+                                time.sleep(0.2)
+                        st.session_state.epic_ids = _ids
+                        epic_ids = _ids
 
-            # Always fetch 7d (actually 9d) and 30d stats for performance score circles
-            if epic_ids:
-                for score_days in (FETCH_7D, FETCH_30D):
-                    label_days = 7 if score_days == FETCH_7D else 30
-                    missing = [n for n in all_fn if epic_ids.get(n) and f"epic_{epic_ids[n]}_{score_days}" not in st.session_state.epic_cache]
+                if epic_ids:
+                    if "epic_cache" not in st.session_state:
+                        st.session_state.epic_cache = {}
+                    start_ts = int(datetime.combine(start_date, datetime.min.time()).timestamp())
+                    end_ts = int(datetime.combine(end_date, datetime.max.time()).timestamp())
+                    range_key = f"{start_ts}_{end_ts}"
+                    missing = [n for n in all_fn if epic_ids.get(n) and f"epic_{epic_ids[n]}_{range_key}" not in st.session_state.epic_cache]
                     if missing:
-                        with st.spinner(f"Loading {label_days}-day stats..."):
+                        with st.spinner(f"Loading stats for {start_date} to {end_date}..."):
                             for name in missing:
                                 aid = epic_ids[name]
-                                parsed = stats_for_window(aid, days=score_days)
-                                cache_key = f"epic_{aid}_{score_days}"
-                                if parsed:
-                                    st.session_state.epic_cache[cache_key] = epic_parsed_to_mode_stats(parsed)
+                                parsed_raw = fetch_stats_epic(aid, start_ts, end_ts)
+                                cache_key = f"epic_{aid}_{range_key}"
+                                if parsed_raw:
+                                    st.session_state.epic_cache[cache_key] = epic_parsed_to_mode_stats(parse_raw_stats(parsed_raw))
                                 else:
                                     st.session_state.epic_cache[cache_key] = None
                                 time.sleep(0.3)
-
-            if time_window in ("7 Days", "30 Days") and epic_ids:
-                fetch_days = FETCH_7D if time_window == "7 Days" else FETCH_30D
-                missing = [n for n in all_fn if epic_ids.get(n) and f"epic_{epic_ids[n]}_{fetch_days}" not in st.session_state.epic_cache]
-                if missing:
-                    with st.spinner(f"Loading {time_window.lower()} stats..."):
-                        for name in missing:
-                            aid = epic_ids[name]
-                            parsed = stats_for_window(aid, days=fetch_days)
-                            cache_key = f"epic_{aid}_{fetch_days}"
-                            if parsed:
-                                st.session_state.epic_cache[cache_key] = epic_parsed_to_mode_stats(parsed)
-                            else:
-                                st.session_state.epic_cache[cache_key] = None
-                            time.sleep(0.3)
-
-            elif time_window == "Season" and epic_ids:
-                start_ts = int(datetime.combine(start_date, datetime.min.time()).timestamp())
-                end_ts = int(datetime.combine(end_date, datetime.max.time()).timestamp())
-                range_key = f"{start_ts}_{end_ts}"
-                missing = [n for n in all_fn if epic_ids.get(n) and f"epic_{epic_ids[n]}_{range_key}" not in st.session_state.epic_cache]
-                if missing:
-                    with st.spinner(f"Loading {season_pick} stats..."):
-                        for name in missing:
-                            aid = epic_ids[name]
-                            parsed_raw = fetch_stats_epic(aid, start_ts, end_ts)
-                            cache_key = f"epic_{aid}_{range_key}"
-                            if parsed_raw:
-                                st.session_state.epic_cache[cache_key] = epic_parsed_to_mode_stats(parse_raw_stats(parsed_raw))
-                            else:
-                                st.session_state.epic_cache[cache_key] = None
-                            time.sleep(0.3)
-
-            elif time_window == "Custom" and epic_ids:
-                start_ts = int(datetime.combine(start_date, datetime.min.time()).timestamp())
-                end_ts = int(datetime.combine(end_date, datetime.max.time()).timestamp())
-                range_key = f"{start_ts}_{end_ts}"
-                missing = [n for n in all_fn if epic_ids.get(n) and f"epic_{epic_ids[n]}_{range_key}" not in st.session_state.epic_cache]
-                if missing:
-                    with st.spinner(f"Loading stats for {start_date} to {end_date}..."):
-                        for name in missing:
-                            aid = epic_ids[name]
-                            parsed_raw = fetch_stats_epic(aid, start_ts, end_ts)
-                            cache_key = f"epic_{aid}_{range_key}"
-                            if parsed_raw:
-                                st.session_state.epic_cache[cache_key] = epic_parsed_to_mode_stats(parse_raw_stats(parsed_raw))
-                            else:
-                                st.session_state.epic_cache[cache_key] = None
-                            time.sleep(0.3)
 
             names = list(all_fn.keys())
             display_names = [all_fn[n]["account"]["name"] for n in names]
@@ -390,16 +366,12 @@ with fn_tab:
                     return stats["all"].get("overall", {}) or {}
                 return stats["all"].get(mode, {}) or {}
 
-            # Compute 7d and 30d performance scores per player
+            # Dub Scores from DB-cached 7d/30d stats
             perf_scores = {}
             for name in all_fn:
-                aid = epic_ids.get(name)
-                if aid:
-                    s7 = st.session_state.get("epic_cache", {}).get(f"epic_{aid}_{FETCH_7D}")
-                    s30 = st.session_state.get("epic_cache", {}).get(f"epic_{aid}_{FETCH_30D}")
-                    perf_scores[name] = (perf_score(s7), perf_score(s30))
-                else:
-                    perf_scores[name] = (None, None)
+                s7 = db_7d.get(name)
+                s30 = db_30d.get(name)
+                perf_scores[name] = (perf_score(s7), perf_score(s30))
 
             # Rankings - only among players with recent activity (both dub scores > 0)
             active_names = [n for n in names if perf_scores.get(n, (None, None))[0] is not None
@@ -505,202 +477,82 @@ with fn_tab:
             """)
 
             # Weekly Trend (12 weeks) - right after battle cards, independent of time window
-            if epic_ids:
-                st.markdown("---")
+            st.markdown("---")
 
-                @st.fragment
-                def render_trend():
-                    TREND_METRICS = {
-                        "K/D": {"key": "kd", "fmt": lambda v: round(v, 2), "axis": "K/D Ratio", "max_y": 10},
-                        "Win Rate": {"key": "win_rate", "fmt": lambda v: round(v, 1), "axis": "Win Rate %"},
-                        "Kills/Match": {"key": "kills_per_match", "fmt": lambda v: round(v, 2), "axis": "Kills per Match", "max_y": 10},
-                        "Hours Played": {"key": "minutes_played", "fmt": lambda v: round(v / 60, 1), "axis": "Hours Played"},
-                    }
+            @st.fragment
+            def render_trend():
+                TREND_METRICS = {
+                    "K/D": {"key": "kd", "fmt": lambda v: round(v, 2), "axis": "K/D Ratio", "max_y": 10},
+                    "Win Rate": {"key": "win_rate", "fmt": lambda v: round(v, 1), "axis": "Win Rate %"},
+                    "Kills/Match": {"key": "kills_per_match", "fmt": lambda v: round(v, 2), "axis": "Kills per Match", "max_y": 10},
+                    "Hours Played": {"key": "minutes_played", "fmt": lambda v: round(v / 60, 1), "axis": "Hours Played"},
+                }
 
-                    # DB column -> API-style key mapping for trend_cache compatibility
-                    DB_TO_API = {
-                        "kd": "kd", "win_rate": "winRate", "kills_per_match": "killsPerMatch",
-                        "minutes_played": "minutesPlayed", "kills": "kills", "matches": "matches",
-                        "score": "score", "players_outlived": "playersOutlived",
-                    }
-
-                    col_metric, _ = st.columns([1, 2])
-                    with col_metric:
-                        selected_metric = st.selectbox(
-                            "Trend Metric", list(TREND_METRICS.keys()), index=0,
-                            key="trend_metric_select"
-                        )
-                    metric_info = TREND_METRICS[selected_metric]
-
-                    st.markdown(f"## {selected_metric} Trend (Past 12 Weeks)")
-
-                    if "trend_cache" not in st.session_state:
-                        st.session_state.trend_cache = {}
-
-                    # Try MotherDuck first for historical weeks
-                    db_data = None
-                    week_ranges = get_all_week_ranges(12)
-                    if HAS_DUCKDB and "db_trends" not in st.session_state:
-                        with st.spinner("Loading trend data from database..."):
-                            db_data = fetch_weekly_trends(list(all_fn.keys()), num_weeks=12)
-                            if db_data is not None:
-                                st.session_state.db_trends = db_data
-                    if "db_trends" in st.session_state:
-                        db_data = st.session_state.db_trends
-
-                    if db_data is not None:
-                        # DB path: use stored weekly data, fetch current week live
-                        st.caption("Source: MotherDuck")
-
-                        # Fetch current week (since last Monday) via API if not cached
-                        today = date.today()
-                        days_since_monday = today.weekday()
-                        current_week_start = today - timedelta(days=days_since_monday)
-                        now_ts = int(time.time())
-                        cw_start_ts = int(datetime.combine(current_week_start, datetime.min.time()).timestamp())
-
-                        for n in names:
-                            aid = epic_ids.get(n)
-                            if not aid:
-                                continue
-                            ck = f"trend_current_{aid}"
-                            if ck not in st.session_state.trend_cache:
-                                raw = fetch_stats_epic(aid, cw_start_ts, now_ts)
-                                if raw:
-                                    parsed = parse_raw_stats(raw)
-                                    ms = epic_parsed_to_mode_stats(parsed)
-                                    o = ms.get("all", {}).get("overall", {})
-                                    st.session_state.trend_cache[ck] = o
-                                else:
-                                    st.session_state.trend_cache[ck] = None
-                                time.sleep(0.3)
-
-                        # Build x labels and y values
-                        x_labels = []
-                        for i, (ws, we) in enumerate(week_ranges):
-                            if i == len(week_ranges) - 1:
-                                x_labels.append("Last Week")
-                            elif i == len(week_ranges) - 2:
-                                x_labels.append("2 Wks Ago")
-                            else:
-                                x_labels.append(f"Wk {i + 1}")
-                        x_labels.append("This Week")
-
-                        tmk = metric_info["key"]
-                        fmt_fn = metric_info["fmt"]
-                        fig = go.Figure()
-                        for n in names:
-                            player_weeks = db_data.get(n, [])
-                            week_lookup = {str(w["week_start"]): w for w in player_weeks}
-                            y_vals = []
-                            for ws, we in week_ranges:
-                                w = week_lookup.get(str(ws))
-                                if w and w.get("matches", 0) > 0 and tmk in w:
-                                    y_vals.append(fmt_fn(w[tmk]))
-                                else:
-                                    y_vals.append(None)
-                            # Current week from API
-                            aid = epic_ids.get(n)
-                            cw = st.session_state.trend_cache.get(f"trend_current_{aid}") if aid else None
-                            api_key = DB_TO_API.get(tmk, tmk)
-                            if cw and cw.get("matches", 0) > 0 and api_key in cw:
-                                y_vals.append(fmt_fn(cw[api_key]))
-                            else:
-                                y_vals.append(None)
-                            fig.add_trace(go.Scatter(
-                                x=x_labels, y=y_vals, mode="lines+markers",
-                                name=all_fn[n]["account"]["name"],
-                                line=dict(width=3), marker=dict(size=10),
-                            ))
-                    else:
-                        # Fallback: all API (old behavior)
-                        st.caption("Source: Live API (database unavailable)")
-
-                        def week_label(i):
-                            if i == 0:
-                                return "This Week"
-                            if i == 1:
-                                return "Last Week"
-                            return f"Wk {12 - i}"
-                        trend_windows = [(week_label(i), i * FETCH_7D, (i + 1) * FETCH_7D) for i in range(12)]
-                        now_ts = int(time.time())
-
-                        trend_missing = False
-                        for n in names:
-                            aid = epic_ids.get(n)
-                            if not aid:
-                                continue
-                            for lbl, d_s, d_e in trend_windows:
-                                if f"trend_{aid}_{d_s}_{d_e}" not in st.session_state.trend_cache:
-                                    trend_missing = True
-                                    break
-
-                        if trend_missing:
-                            with st.spinner("Loading trend data..."):
-                                for n in names:
-                                    aid = epic_ids.get(n)
-                                    if not aid:
-                                        continue
-                                    for lbl, d_s, d_e in trend_windows:
-                                        ck = f"trend_{aid}_{d_s}_{d_e}"
-                                        if ck in st.session_state.trend_cache:
-                                            continue
-                                        s_ts = now_ts - (d_e * 86400)
-                                        e_ts = now_ts - (d_s * 86400)
-                                        raw = fetch_stats_epic(aid, s_ts, e_ts)
-                                        if raw:
-                                            parsed = parse_raw_stats(raw)
-                                            ms = epic_parsed_to_mode_stats(parsed)
-                                            o = ms.get("all", {}).get("overall", {})
-                                            st.session_state.trend_cache[ck] = {
-                                                "kd": o.get("kd", 0),
-                                                "kills": o.get("kills", 0),
-                                                "matches": o.get("matches", 0),
-                                                "winRate": o.get("winRate", 0),
-                                                "killsPerMatch": o.get("killsPerMatch", 0),
-                                                "scorePerMin": o.get("scorePerMin", 0),
-                                                "scorePerMatch": o.get("scorePerMatch", 0),
-                                                "minutesPlayed": o.get("minutesPlayed", 0),
-                                            }
-                                        else:
-                                            st.session_state.trend_cache[ck] = None
-                                        time.sleep(0.3)
-
-                        tmk_api = {"kd": "kd", "win_rate": "winRate", "kills_per_match": "killsPerMatch",
-                                   "minutes_played": "minutesPlayed"}.get(metric_info["key"], metric_info["key"])
-                        fmt_fn = metric_info["fmt"]
-                        fig = go.Figure()
-                        x_labels = [w[0] for w in reversed(trend_windows)]
-                        for n in names:
-                            aid = epic_ids.get(n)
-                            if not aid:
-                                continue
-                            y_vals = []
-                            for lbl, d_s, d_e in reversed(trend_windows):
-                                ck = f"trend_{aid}_{d_s}_{d_e}"
-                                cached = st.session_state.trend_cache.get(ck)
-                                if cached and cached.get("matches", 0) > 0 and tmk_api in cached:
-                                    y_vals.append(fmt_fn(cached[tmk_api]))
-                                else:
-                                    y_vals.append(None)
-                            fig.add_trace(go.Scatter(
-                                x=x_labels, y=y_vals, mode="lines+markers",
-                                name=all_fn[n]["account"]["name"],
-                                line=dict(width=3), marker=dict(size=10),
-                            ))
-
-                    y_range = [0, metric_info["max_y"]] if "max_y" in metric_info else None
-                    fig.update_layout(
-                        template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)",
-                        paper_bgcolor="rgba(0,0,0,0)", height=400,
-                        yaxis_title=metric_info["axis"], yaxis_range=y_range,
-                        font=dict(color="white"),
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10)),
-                        margin=dict(t=60, b=40),
+                col_metric, _ = st.columns([1, 2])
+                with col_metric:
+                    selected_metric = st.selectbox(
+                        "Trend Metric", list(TREND_METRICS.keys()), index=0,
+                        key="trend_metric_select"
                     )
-                    st.plotly_chart(fig, use_container_width=True)
+                metric_info = TREND_METRICS[selected_metric]
 
-                render_trend()
+                st.markdown(f"## {selected_metric} Trend (Past 12 Weeks)")
+
+                # Load from MotherDuck
+                if "db_trends" not in st.session_state:
+                    with st.spinner("Loading trend data..."):
+                        db_data = fetch_weekly_trends(list(all_fn.keys()), num_weeks=12)
+                        st.session_state.db_trends = db_data
+
+                db_data = st.session_state.get("db_trends")
+                if not db_data:
+                    st.caption("Trend data not available yet.")
+                    return
+
+                st.caption("Source: MotherDuck")
+                week_ranges = get_all_week_ranges(12)
+
+                # Build x labels
+                x_labels = []
+                for i, (ws, we) in enumerate(week_ranges):
+                    if i == len(week_ranges) - 1:
+                        x_labels.append("Last Week")
+                    elif i == len(week_ranges) - 2:
+                        x_labels.append("2 Wks Ago")
+                    else:
+                        x_labels.append(f"Wk {i + 1}")
+
+                tmk = metric_info["key"]
+                fmt_fn = metric_info["fmt"]
+                fig = go.Figure()
+                for n in names:
+                    player_weeks = db_data.get(n, [])
+                    week_lookup = {str(w["week_start"]): w for w in player_weeks}
+                    y_vals = []
+                    for ws, we in week_ranges:
+                        w = week_lookup.get(str(ws))
+                        if w and w.get("matches", 0) > 0 and tmk in w:
+                            y_vals.append(fmt_fn(w[tmk]))
+                        else:
+                            y_vals.append(None)
+                    fig.add_trace(go.Scatter(
+                        x=x_labels, y=y_vals, mode="lines+markers",
+                        name=all_fn[n]["account"]["name"],
+                        line=dict(width=3), marker=dict(size=10),
+                    ))
+
+                y_range = [0, metric_info["max_y"]] if "max_y" in metric_info else None
+                fig.update_layout(
+                    template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)", height=400,
+                    yaxis_title=metric_info["axis"], yaxis_range=y_range,
+                    font=dict(color="white"),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10)),
+                    margin=dict(t=60, b=40),
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+            render_trend()
 
             # Percentile Rankings (click to expand per player)
             st.markdown("---")
@@ -893,7 +745,11 @@ with fn_tab:
                     summary_lines = []
                     wow_lines = []
                     dub_lines = []
-                    trend_data = st.session_state.get("trend_cache", {})
+                    # Load db_trends for WoW comparison if not already loaded
+                    if "db_trends" not in st.session_state:
+                        _dt = fetch_weekly_trends(list(all_fn.keys()), num_weeks=12)
+                        st.session_state.db_trends = _dt
+                    db_trends_data = st.session_state.get("db_trends") or {}
 
                     def _delta(curr, prev, fmt=".2f"):
                         diff = curr - prev
@@ -902,10 +758,7 @@ with fn_tab:
 
                     for name in names:
                         display = all_fn[name]["account"]["name"]
-                        aid = epic_ids.get(name)
-                        if not aid:
-                            continue
-                        s7_data = st.session_state.get("epic_cache", {}).get(f"epic_{aid}_{FETCH_7D}")
+                        s7_data = db_7d.get(name)
                         if not s7_data:
                             continue
                         o7 = s7_data.get("all", {}).get("overall", {})
@@ -924,13 +777,14 @@ with fn_tab:
                         # Add Dub Score context
                         s7_score, s30_score = perf_scores.get(name, (None, None))
                         dub_lines.append(f"{display}: 7-Day Dub Score {s7_score or 'N/A'}, 30-Day Dub Score {s30_score or 'N/A'}")
-                        # Pull last week from trend cache for WoW
-                        lw = trend_data.get(f"trend_{aid}_{FETCH_7D}_{FETCH_7D * 2}")
+                        # Pull last completed week from DB for WoW comparison
+                        player_weeks = db_trends_data.get(name, [])
+                        lw = player_weeks[-1] if player_weeks else None
                         if lw and lw.get("matches", 0) > 0:
                             wow_lines.append(
                                 f"{display} week-over-week changes: K/D {_delta(o7.get('kd',0), lw.get('kd',0))} WoW, "
-                                f"Win Rate {_delta(o7.get('winRate',0), lw.get('winRate',0), '.1f')}% WoW, "
-                                f"Kills/Match {_delta(o7.get('killsPerMatch',0), lw.get('killsPerMatch',0))} WoW, "
+                                f"Win Rate {_delta(o7.get('winRate',0), lw.get('win_rate',0), '.1f')}% WoW, "
+                                f"Kills/Match {_delta(o7.get('killsPerMatch',0), lw.get('kills_per_match',0))} WoW, "
                                 f"Matches this week: {o7.get('matches',0)} vs last week: {lw.get('matches',0)}"
                             )
 

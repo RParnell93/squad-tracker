@@ -18,7 +18,13 @@ jobs:
       - name: Install dependencies
         run: pip install requests duckdb==1.4.4
 
-      - name: Run snapshot (current + prior week)
+      - name: Run daily refresh (lifetime + 7d + 30d + weekly stats)
         env:
           MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
-        run: python snapshot.py --backfill 2
+          FORTNITE_API_KEY: ${{ secrets.FORTNITE_API_KEY }}
+          EPIC_CLIENT_ID: ${{ secrets.EPIC_CLIENT_ID }}
+          EPIC_CLIENT_SECRET: ${{ secrets.EPIC_CLIENT_SECRET }}
+          EPIC_DEVICE_ACCOUNT_ID: ${{ secrets.EPIC_DEVICE_ACCOUNT_ID }}
+          EPIC_DEVICE_ID: ${{ secrets.EPIC_DEVICE_ID }}
+          EPIC_DEVICE_SECRET: ${{ secrets.EPIC_DEVICE_SECRET }}
+        run: python snapshot.py
