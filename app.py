@@ -185,7 +185,7 @@ with st.sidebar:
     .sidebar-section {{
         font-size: 0.65em; font-weight: 600; color: {_sb_accent};
         text-transform: uppercase; letter-spacing: 0.5px;
-        margin: 20px 0 8px 0; opacity: 0.8;
+        margin: 4px 0 6px 0; opacity: 0.8;
     }}
     .player-row {{
         display: flex; align-items: center; justify-content: space-between;
@@ -246,9 +246,9 @@ with st.sidebar:
                 _save_and_sync(st.session_state.squad)
                 st.rerun()
 
-        with st.expander("Add Custom Player"):
-            new_name = st.text_input("Gamertag", key="fn_new_name", label_visibility="collapsed", placeholder="Gamertag")
-            new_platform = st.selectbox("Platform", list(platform_map.keys()), key="fn_platform", label_visibility="collapsed")
+        with st.expander("Add Custom Player", expanded=False):
+            new_name = st.text_input("Gamertag", key="fn_new_name", label_visibility="collapsed", placeholder="Gamertag / Epic Name")
+            new_platform = st.selectbox("Platform", list(platform_map.keys()), key="fn_platform")
             if st.button("Add Player", key="fn_add", width="stretch"):
                 if new_name.strip():
                     st.session_state.squad["fortnite_players"].append({
