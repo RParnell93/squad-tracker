@@ -389,9 +389,12 @@ with fn_tab:
                 else:
                     perf_scores[name] = (None, None)
 
-            # Supreme Leader - best composite score (K/D + Win Rate + Kills/Match percentiles)
+            # Supreme Leader - best composite score, must have played in the last 7 days
             fn_composite = {}
             for n in names:
+                s7_score = perf_scores.get(n, (None, None))[0]
+                if s7_score is None:
+                    continue  # no 7-day activity = not eligible
                 o = player_mode(n)
                 if o and o.get("matches", 0):
                     fn_composite[n] = (
@@ -399,8 +402,6 @@ with fn_tab:
                         + 0.3 * value_to_percentile(o.get("winRate", 0) or 0, SCORE_CURVES["winRate"])
                         + 0.3 * value_to_percentile(o.get("killsPerMatch", 0) or 0, SCORE_CURVES["killsPerMatch"])
                     )
-                else:
-                    fn_composite[n] = 0
             fn_supreme = max(fn_composite, key=fn_composite.get) if fn_composite and max(fn_composite.values()) > 0 else None
 
             # Battle Cards
