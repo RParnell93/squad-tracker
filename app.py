@@ -677,10 +677,12 @@ if active_game == "Fortnite":
                     player_weeks = db_data.get(n, [])
                     week_lookup = {str(w["week_start"]): w for w in player_weeks}
                     y_vals = []
+                    cap = metric_info.get("max_y")
                     for ws, we in week_ranges:
                         w = week_lookup.get(str(ws))
                         if w and w.get("matches", 0) > 0 and tmk in w:
-                            y_vals.append(fmt_fn(w[tmk]))
+                            v = fmt_fn(w[tmk])
+                            y_vals.append(min(v, cap) if cap else v)
                         else:
                             y_vals.append(None)
                     fig.add_trace(go.Scatter(
@@ -690,11 +692,13 @@ if active_game == "Fortnite":
                     ))
 
                 if "max_y" in metric_info:
-                    # Find actual max across all traces, cap at configured max_y unless data exceeds it
-                    all_y = [v for trace in fig.data for v in trace.y if v is not None]
-                    data_max = max(all_y) if all_y else 0
-                    y_ceil = max(metric_info["max_y"], data_max * 1.1)
-                    y_range = [0, y_ceil]
+                    cap_val = metric_info["max_y"]
+                    y_range = [0, cap_val * 1.05]
+                    # Label top tick as "10+" etc.
+                    fig.update_layout(yaxis=dict(
+                        tickvals=list(range(0, cap_val + 1, 2)) if cap_val <= 10 else None,
+                        ticktext=[str(v) if v < cap_val else f"{cap_val}+" for v in range(0, cap_val + 1, 2)] if cap_val <= 10 else None,
+                    ))
                 else:
                     y_range = None
                 fig.update_layout(

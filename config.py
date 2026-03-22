@@ -70,11 +70,16 @@ CSS = """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
 
-    /* Global font override */
+    /* Global font override - exclude Material Icons used by Streamlit widgets */
     html, body, [class*="css"], .stApp,
     [data-testid="stSidebar"],
-    [data-testid="stSidebar"] * {
+    [data-testid="stSidebar"] *:not([class*="icon"]):not([class*="Icon"]):not([data-testid*="icon"]):not(.material-icons):not(.material-symbols-rounded):not(.material-symbols-outlined) {
         font-family: 'JetBrains Mono', monospace !important;
+    }
+    /* Preserve Streamlit's icon fonts */
+    .material-icons, .material-symbols-rounded, .material-symbols-outlined,
+    [class*="icon-font"], span[data-testid="stIconMaterial"] {
+        font-family: 'Material Symbols Rounded', 'Material Icons' !important;
     }
     /* Headings - tighter tracking for mono */
     h1, h2, h3, h4, h5, h6,
