@@ -851,8 +851,6 @@ if active_game == "Fortnite":
                 )
                 st.plotly_chart(fig, width="stretch")
 
-            render_player_trend()
-
             # Charts
             st.markdown("---")
             st.markdown("## Squad Comparison")
@@ -916,6 +914,10 @@ if active_game == "Fortnite":
             fig.update_layout(polar=dict(bgcolor="rgba(0,0,0,0)", radialaxis=dict(visible=True, range=[0, 105], color="#a8a8b3", showticklabels=False), angularaxis=dict(color="#a8a8b3")),
                               template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=420, font=dict(family="JetBrains Mono, monospace", color="white"))
             st.plotly_chart(fig, width="stretch")
+
+            # Player Deep Dive
+            st.markdown("---")
+            render_player_trend()
 
             # Game Mode Breakdown
             st.markdown("---")
