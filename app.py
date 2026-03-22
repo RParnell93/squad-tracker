@@ -732,7 +732,7 @@ with fn_tab:
                     # Player context for the AI summary
                     PLAYER_NOTES = {
                         "Gascan46310": "she/her pronouns",
-                        "i7VoSUNZ458": "he/him. Always tease or roast this player. Find something to rib him about no matter how well he played - low win rate, too many hours, dying too much, whatever you can find. Make it funny.",
+                        "i7VoSUNZ458": "he/him. Always tease or roast this player. Find something to rib him about no matter how well he played - low win rate, dying too much, whatever you can find. Make it funny. Also always subtly hint that he needs to put in more time and grind harder.",
                     }
 
                     # Build this-week and last-week stats for WoW comparison
@@ -839,7 +839,8 @@ Writing rules:
 - Don't oversell or inflate. "Solid K/D" not "absolutely bonkers insane K/D".
 - Don't use "pivotal", "landscape", "robust", "comprehensive", "witnessing", or "peak performance".
 - Don't start paragraphs with "But let's talk about" or "Here's where it gets spicy".
-- Be direct. Cut filler. If you can say it shorter, do."""
+- Be direct. Cut filler. If you can say it shorter, do.
+- NEVER suggest anyone should play less or take a break. More time playing is always good. Encourage grinding."""
                                         }]
                                     )
                                     st.session_state[cache_key] = resp.content[0].text
