@@ -185,7 +185,7 @@ with st.sidebar:
     .sidebar-section {{
         font-size: 0.65em; font-weight: 600; color: {_sb_accent};
         text-transform: uppercase; letter-spacing: 0.5px;
-        margin: 12px 0 6px 0; opacity: 0.8;
+        margin: 20px 0 8px 0; opacity: 0.8;
     }}
     .player-row {{
         display: flex; align-items: center; justify-content: space-between;
@@ -196,12 +196,17 @@ with st.sidebar:
     }}
     .player-row:hover {{ background: rgba(255,255,255,0.06); }}
     .player-name {{
-        font-weight: 600; font-size: 0.88em; color: #e6e6e6;
+        font-weight: 600; font-size: 0.82em; color: #e6e6e6;
+        overflow: hidden; text-overflow: ellipsis;
+    }}
+    .player-tag-row {{
+        display: flex; align-items: center; gap: 4px;
+        white-space: nowrap; overflow: hidden;
     }}
     .plat-tag {{
-        padding: 1px 7px; border-radius: 4px;
-        font-size: 0.6em; font-weight: 700; letter-spacing: 0.5px;
-        color: white; vertical-align: middle; margin-left: 6px;
+        padding: 1px 5px; border-radius: 4px;
+        font-size: 0.55em; font-weight: 700; letter-spacing: 0.5px;
+        color: white; flex-shrink: 0;
     }}
     .sidebar-share {{
         padding: 8px 12px; margin-top: 4px;
@@ -213,7 +218,8 @@ with st.sidebar:
     }}
     </style>""", unsafe_allow_html=True)
 
-    _game_icon = "🎯" if active_game == "Fortnite" else "🛡️"
+    _fn_icon_svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" style="vertical-align:middle;"><path fill="#e94560" d="M17.5 1h-11A3.5 3.5 0 0 0 3 4.5v15A3.5 3.5 0 0 0 6.5 23h11a3.5 3.5 0 0 0 3.5-3.5v-15A3.5 3.5 0 0 0 17.5 1zM12 4l2 4H10l2-4zm-3.5 7a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm7 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zM12 20a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"/></svg>'
+    _game_icon = _fn_icon_svg if active_game == "Fortnite" else "🛡️"
     _game_label = "Fortnite" if active_game == "Fortnite" else "Overwatch 2"
     st.markdown(f'<div class="sidebar-header"><span class="icon">{_game_icon}</span><span class="title">{_game_label} Squad</span></div>', unsafe_allow_html=True)
 
@@ -241,9 +247,8 @@ with st.sidebar:
                 st.rerun()
 
         with st.expander("Add Custom Player"):
-            col1, col2 = st.columns([2, 1])
-            new_name = col1.text_input("Gamertag", key="fn_new_name", label_visibility="collapsed", placeholder="Gamertag")
-            new_platform = col2.selectbox("Platform", list(platform_map.keys()), key="fn_platform", label_visibility="collapsed")
+            new_name = st.text_input("Gamertag", key="fn_new_name", label_visibility="collapsed", placeholder="Gamertag")
+            new_platform = st.selectbox("Platform", list(platform_map.keys()), key="fn_platform", label_visibility="collapsed")
             if st.button("Add Player", key="fn_add", width="stretch"):
                 if new_name.strip():
                     st.session_state.squad["fortnite_players"].append({
@@ -266,7 +271,7 @@ with st.sidebar:
             _pc = _platform_colors.get(p['platform'], '#a8a8b3')
             _ps = _plat_short.get(p['platform'], p['platform'].upper())
             col_name.markdown(
-                f'<span class="player-name">{p["name"]}</span> <span class="plat-tag" style="background:{_pc};">{_ps}</span>',
+                f'<div class="player-tag-row"><span class="player-name">{p["name"]}</span><span class="plat-tag" style="background:{_pc};">{_ps}</span></div>',
                 unsafe_allow_html=True,
             )
             if col_btn.button("✕", key=f"fn_rm_{i}"):
@@ -312,7 +317,7 @@ with st.sidebar:
         to_remove = None
         for i, p in enumerate(ow2_list):
             col_name, col_btn = st.columns([3, 1])
-            col_name.markdown(f'<span class="player-name">{p["name"]}</span> <span class="plat-tag" style="background:#f99e1a;">OW2</span>', unsafe_allow_html=True)
+            col_name.markdown(f'<div class="player-tag-row"><span class="player-name">{p["name"]}</span><span class="plat-tag" style="background:#f99e1a;">OW2</span></div>', unsafe_allow_html=True)
             if col_btn.button("✕", key=f"ow2_rm_{i}"):
                 to_remove = i
         if to_remove is not None:
@@ -579,8 +584,6 @@ if active_game == "Fortnite":
                 kills_badge = ' <span class="rank-badge">BEST</span>' if is_active and kills == best_kills and len(all_fn) > 1 and kills > 0 else ""
                 kpm_badge = ' <span class="rank-badge">BEST</span>' if is_active and kpm == best_kpm and len(all_fn) > 1 and kpm > 0 else ""
 
-                window_label = time_window.upper()
-
                 circle_7d = score_circle_html(s7, "7-Day<br>Dub Score")
                 circle_30d = score_circle_html(s30, "30-Day<br>Dub Score")
 
@@ -589,13 +592,13 @@ if active_game == "Fortnite":
                 fn_cards_html.append(f"""
                 <div class="battle-card" style="{'border-color:#ffd700;box-shadow:0 0 12px rgba(255,215,0,0.3);' if is_supreme else ''}">
                     <div class="player-name" style="display:flex;align-items:center;flex-wrap:nowrap;">{data['account']['name']}{'<span style="background:linear-gradient(90deg,#ffd700,#ffaa00);color:#1a1a2e;padding:1px 6px;border-radius:8px;font-size:0.45em;font-weight:800;margin-left:6px;letter-spacing:0.5px;white-space:nowrap;">SUPREME LEADER</span>' if is_supreme else ''}</div>
-                    <div class="player-platform" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">{_plat_tag} <span>BP Lv {bp.get('level', '?')}</span> <span>{window_label}</span></div>
+                    <div class="player-platform" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">{_plat_tag} <span>BP Lv {bp.get('level', '?')}</span></div>
                     <div style="display: flex; justify-content: center; gap: 16px; margin-bottom: 12px;">
                         {circle_7d}{circle_30d}
                     </div>
                     <div style="display: flex; justify-content: space-around; margin-bottom: 16px;">
                         <div class="big-stat"><div class="big-stat-value">{kd:.2f}</div><div class="big-stat-label">K/D</div></div>
-                        <div class="big-stat"><div class="big-stat-value">{wins:,}<span style="font-size:0.4em;color:rgba(144,202,249,0.5);font-weight:600;margin-left:4px;">{wr:.1f}%</span></div><div class="big-stat-label">Dubs</div></div>
+                        <div class="big-stat"><div class="big-stat-value">{wins:,}</div><div class="big-stat-label">Dubs</div></div>
                         <div class="big-stat"><div class="big-stat-value">{kpm:.2f}</div><div class="big-stat-label">Kills/Match</div></div>
                     </div>
                     <div class="stat-row"><span class="stat-label">Matches</span><span class="stat-value">{matches:,}</span></div>
@@ -852,33 +855,29 @@ if active_game == "Fortnite":
             st.markdown("---")
             st.markdown("## Squad Comparison")
 
+            def _hbar(labels, values, title, fmt, accent="#e94560"):
+                paired = sorted(zip(labels, values), key=lambda x: x[1])
+                s_labels, s_vals = zip(*paired) if paired else ([], [])
+                colors = [accent if v == max(s_vals) else "#16213e" for v in s_vals]
+                texts = [fmt.format(v) for v in s_vals]
+                fig = go.Figure(go.Bar(y=list(s_labels), x=list(s_vals), marker_color=colors, text=texts,
+                                       textposition="outside", orientation="h", hoverinfo="none"))
+                h = max(250, len(s_labels) * 40 + 80)
+                fig.update_layout(title=title, template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                                  height=h, font=dict(family="JetBrains Mono, monospace", color="white"), margin=dict(l=120, r=60))
+                st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+
             c1, c2 = st.columns(2)
             with c1:
-                kds = [player_mode(n).get("kd", 0) or 0 for n in names]
-                colors = ["#e94560" if v == max(kds) else "#16213e" for v in kds]
-                fig = go.Figure(go.Bar(x=display_names, y=kds, marker_color=colors, text=[f"{v:.2f}" for v in kds], textposition="outside"))
-                fig.update_layout(title="K/D Ratio", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="K/D", height=350, font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80))
-                st.plotly_chart(fig, width="stretch")
+                _hbar(display_names, [player_mode(n).get("kd", 0) or 0 for n in names], "K/D Ratio", "{:.2f}")
             with c2:
-                wrs = [player_mode(n).get("winRate", 0) or 0 for n in names]
-                colors = ["#e94560" if v == max(wrs) else "#16213e" for v in wrs]
-                fig = go.Figure(go.Bar(x=display_names, y=wrs, marker_color=colors, text=[f"{v:.1f}%" for v in wrs], textposition="outside"))
-                fig.update_layout(title="Win Rate", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Win %", height=350, font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80))
-                st.plotly_chart(fig, width="stretch")
+                _hbar(display_names, [player_mode(n).get("winRate", 0) or 0 for n in names], "Win Rate", "{:.1f}%")
 
             c3, c4 = st.columns(2)
             with c3:
-                kpms = [player_mode(n).get("killsPerMatch", 0) or 0 for n in names]
-                colors = ["#e94560" if v == max(kpms) else "#16213e" for v in kpms]
-                fig = go.Figure(go.Bar(x=display_names, y=kpms, marker_color=colors, text=[f"{v:.2f}" for v in kpms], textposition="outside"))
-                fig.update_layout(title="Kills / Match", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Kills", height=350, font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80))
-                st.plotly_chart(fig, width="stretch")
+                _hbar(display_names, [player_mode(n).get("killsPerMatch", 0) or 0 for n in names], "Kills / Match", "{:.2f}")
             with c4:
-                spms = [player_mode(n).get("scorePerMatch", 0) or 0 for n in names]
-                colors = ["#e94560" if v == max(spms) else "#16213e" for v in spms]
-                fig = go.Figure(go.Bar(x=display_names, y=spms, marker_color=colors, text=[f"{v:.0f}" for v in spms], textposition="outside"))
-                fig.update_layout(title="Score / Match", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Score", height=350, font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80))
-                st.plotly_chart(fig, width="stretch")
+                _hbar(display_names, [player_mode(n).get("scorePerMatch", 0) or 0 for n in names], "Score / Match", "{:.0f}")
 
             # Radar - normalize each stat to 0-100 across squad
             st.markdown("### Skill Radar")
@@ -1280,7 +1279,7 @@ elif active_game == "Overwatch 2":
                     </div>
                     <div style="display: flex; justify-content: space-around; margin-bottom: 16px;">
                         <div class="big-stat"><div class="big-stat-value">{kda:.2f}</div><div class="big-stat-label">KDA</div></div>
-                        <div class="big-stat"><div class="big-stat-value">{wins:,}<span style="font-size:0.4em;color:rgba(249,158,26,0.5);font-weight:600;margin-left:4px;">{winrate:.1f}%</span></div><div class="big-stat-label">Dubs</div></div>
+                        <div class="big-stat"><div class="big-stat-value">{wins:,}</div><div class="big-stat-label">Dubs</div></div>
                         <div class="big-stat"><div class="big-stat-value">{avg.get('eliminations', 0):.1f}</div><div class="big-stat-label">Avg Elims</div></div>
                     </div>
                     <div class="stat-row"><span class="stat-label">Games Played</span><span class="stat-value">{games:,}</span></div>
@@ -1310,33 +1309,29 @@ elif active_game == "Overwatch 2":
             ow2_names = list(all_ow2.keys())
             ow2_display = [all_ow2[n].get("summary", {}).get("username", n) for n in ow2_names]
 
+            def _hbar_ow2(labels, values, title, fmt, accent="#f99e1a"):
+                paired = sorted(zip(labels, values), key=lambda x: x[1])
+                s_labels, s_vals = zip(*paired) if paired else ([], [])
+                colors = [accent if v == max(s_vals) else "#16213e" for v in s_vals]
+                texts = [fmt.format(v) for v in s_vals]
+                fig = go.Figure(go.Bar(y=list(s_labels), x=list(s_vals), marker_color=colors, text=texts,
+                                       textposition="outside", orientation="h", hoverinfo="none"))
+                h = max(250, len(s_labels) * 40 + 80)
+                fig.update_layout(title=title, template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+                                  height=h, font=dict(family="JetBrains Mono, monospace", color="white"), margin=dict(l=120, r=60))
+                st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+
             c1, c2 = st.columns(2)
             with c1:
-                kdas = [all_ow2[n].get("stats", {}).get("general", {}).get("kda", 0) for n in ow2_names]
-                colors = ["#f99e1a" if v == max(kdas) else "#16213e" for v in kdas]
-                fig = go.Figure(go.Bar(x=ow2_display, y=kdas, marker_color=colors, text=[f"{v:.2f}" for v in kdas], textposition="outside"))
-                fig.update_layout(title="KDA", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80))
-                st.plotly_chart(fig, width="stretch")
+                _hbar_ow2(ow2_display, [all_ow2[n].get("stats", {}).get("general", {}).get("kda", 0) for n in ow2_names], "KDA", "{:.2f}")
             with c2:
-                wrs = [all_ow2[n].get("stats", {}).get("general", {}).get("winrate", 0) for n in ow2_names]
-                colors = ["#f99e1a" if v == max(wrs) else "#16213e" for v in wrs]
-                fig = go.Figure(go.Bar(x=ow2_display, y=wrs, marker_color=colors, text=[f"{v:.1f}%" for v in wrs], textposition="outside"))
-                fig.update_layout(title="Win Rate", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80))
-                st.plotly_chart(fig, width="stretch")
+                _hbar_ow2(ow2_display, [all_ow2[n].get("stats", {}).get("general", {}).get("winrate", 0) for n in ow2_names], "Win Rate", "{:.1f}%")
 
             c3, c4 = st.columns(2)
             with c3:
-                dmgs = [all_ow2[n].get("stats", {}).get("general", {}).get("average", {}).get("damage", 0) for n in ow2_names]
-                colors = ["#f99e1a" if v == max(dmgs) else "#16213e" for v in dmgs]
-                fig = go.Figure(go.Bar(x=ow2_display, y=dmgs, marker_color=colors, text=[f"{v:,.0f}" for v in dmgs], textposition="outside"))
-                fig.update_layout(title="Avg Damage / Game", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80))
-                st.plotly_chart(fig, width="stretch")
+                _hbar_ow2(ow2_display, [all_ow2[n].get("stats", {}).get("general", {}).get("average", {}).get("damage", 0) for n in ow2_names], "Avg Damage / Game", "{:,.0f}")
             with c4:
-                heals = [all_ow2[n].get("stats", {}).get("general", {}).get("average", {}).get("healing", 0) for n in ow2_names]
-                colors = ["#f99e1a" if v == max(heals) else "#16213e" for v in heals]
-                fig = go.Figure(go.Bar(x=ow2_display, y=heals, marker_color=colors, text=[f"{v:,.0f}" for v in heals], textposition="outside"))
-                fig.update_layout(title="Avg Healing / Game", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80))
-                st.plotly_chart(fig, width="stretch")
+                _hbar_ow2(ow2_display, [all_ow2[n].get("stats", {}).get("general", {}).get("average", {}).get("healing", 0) for n in ow2_names], "Avg Healing / Game", "{:,.0f}")
 
             # Radar - normalize each stat to 0-100 across squad
             st.markdown("### Skill Radar")
@@ -1371,7 +1366,9 @@ elif active_game == "Overwatch 2":
             @st.fragment
             def role_breakdown():
                 st.markdown("## Role Breakdown")
-                role_sel = st.selectbox("Select View", ["Overall", "Tank", "Damage", "Support"], key="ow2_role")
+                role_sel = st.segmented_control("Role", ["Overall", "Tank", "Damage", "Support"], default="Overall", key="ow2_role")
+                if not role_sel:
+                    role_sel = "Overall"
                 table_data = []
                 for n in ow2_names:
                     s = all_ow2[n].get("stats", {})
