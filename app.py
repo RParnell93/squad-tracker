@@ -31,6 +31,12 @@ st.set_page_config(page_title="Squad Tracker", page_icon="🎮", layout="wide")
 
 PLOTLY_CONFIG = {"displayModeBar": False, "scrollZoom": False}
 
+def _lock_axes(fig):
+    """Disable all zoom/pan on a Plotly figure by locking every axis."""
+    fig.update_xaxes(fixedrange=True)
+    fig.update_yaxes(fixedrange=True)
+    return fig
+
 # ── CSS ──────────────────────────────────────────────────────────────────────
 st.markdown(CSS, unsafe_allow_html=True)
 
@@ -748,6 +754,7 @@ if active_game == "Fortnite":
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10)),
                     margin=dict(t=60, b=40), dragmode=False,
                 )
+                _lock_axes(fig)
                 st.plotly_chart(fig, width="stretch", config=PLOTLY_CONFIG)
 
             render_trend()
@@ -840,6 +847,7 @@ if active_game == "Fortnite":
                     margin=dict(t=60, b=40),
                     xaxis=dict(tickformat="%b %d"), dragmode=False,
                 )
+                _lock_axes(fig)
                 st.plotly_chart(fig, width="stretch", config=PLOTLY_CONFIG)
 
             # Charts
@@ -858,6 +866,7 @@ if active_game == "Fortnite":
                 fig.update_layout(title=title, template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                                   height=h, font=dict(family="JetBrains Mono, monospace", color="white"), margin=dict(l=140, r=100),
                                   xaxis=dict(range=[0, _max_val * 1.2]), dragmode=False)
+                _lock_axes(fig)
                 st.plotly_chart(fig, width="stretch", config=PLOTLY_CONFIG)
 
             c1, c2 = st.columns(2)
@@ -905,6 +914,7 @@ if active_game == "Fortnite":
                 ))
             fig.update_layout(polar=dict(bgcolor="rgba(0,0,0,0)", radialaxis=dict(visible=True, range=[0, 105], color="#a8a8b3", showticklabels=False), angularaxis=dict(color="#a8a8b3")),
                               template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=420, font=dict(family="JetBrains Mono, monospace", color="white"), dragmode=False)
+            _lock_axes(fig)
             st.plotly_chart(fig, width="stretch", config=PLOTLY_CONFIG)
 
             # Player Deep Dive
@@ -1344,6 +1354,7 @@ elif active_game == "Overwatch 2":
                 fig.update_layout(title=title, template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
                                   height=h, font=dict(family="JetBrains Mono, monospace", color="white"), margin=dict(l=140, r=100),
                                   xaxis=dict(range=[0, _max_val * 1.2]), dragmode=False)
+                _lock_axes(fig)
                 st.plotly_chart(fig, width="stretch", config=PLOTLY_CONFIG)
 
             c1, c2 = st.columns(2)
@@ -1384,6 +1395,7 @@ elif active_game == "Overwatch 2":
                 ))
             fig.update_layout(polar=dict(bgcolor="rgba(0,0,0,0)", radialaxis=dict(visible=True, range=[0, 105], color="#a8a8b3", showticklabels=False), angularaxis=dict(color="#a8a8b3")),
                               template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=420, font=dict(family="JetBrains Mono, monospace", color="white"), dragmode=False)
+            _lock_axes(fig)
             st.plotly_chart(fig, width="stretch", config=PLOTLY_CONFIG)
 
             # Role breakdown table
@@ -1477,6 +1489,7 @@ elif active_game == "Overwatch 2":
                                           plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=h,
                                           font=dict(family="JetBrains Mono, monospace", color="white"),
                                           margin=dict(l=120, r=140), xaxis=dict(range=[0, max_val * 1.35]), dragmode=False)
+                        _lock_axes(fig)
                         st.plotly_chart(fig, width="stretch", config=PLOTLY_CONFIG)
                 else:
                     st.caption("No hero data available for this player.")
