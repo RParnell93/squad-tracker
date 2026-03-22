@@ -833,7 +833,7 @@ if active_game == "Fortnite":
                     line=dict(color="#e94560", width=3),
                     marker=dict(size=6),
                     name=trace_name,
-                    hovertemplate="%{x|%b %d}<br>" + rolling_metric + ": %{y}<extra></extra>",
+                    hovertemplate="<span style='font-size:14px'>%{x|%b %d}<br><b>" + rolling_metric + ": %{y}</b></span><extra></extra>",
                 ))
 
                 fig.update_layout(
@@ -844,6 +844,7 @@ if active_game == "Fortnite":
                     height=350,
                     yaxis_title=metric_info["axis"],
                     font=dict(family="JetBrains Mono, monospace", color="white"),
+                    hoverlabel=dict(font_size=14, font_family="JetBrains Mono, monospace"),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10)),
                     margin=dict(t=60, b=40),
                     xaxis=dict(tickformat="%b %d"),
