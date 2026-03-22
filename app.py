@@ -371,7 +371,7 @@ with fn_tab:
             for name in all_fn:
                 s7 = db_7d.get(name)
                 s30 = db_30d.get(name)
-                perf_scores[name] = (perf_score(s7), perf_score(s30))
+                perf_scores[name] = (perf_score(s7, window_days=7), perf_score(s30, window_days=30))
 
             # Rankings - only among players with recent activity (both dub scores > 0)
             active_names = [n for n in names if perf_scores.get(n, (None, None))[0] is not None

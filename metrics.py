@@ -1,38 +1,39 @@
 # Performance Score and Percentile curves
-# Community-sourced percentile lookup tables based on FortniteTracker tier data
-# Format: list of (value, percentile) tuples - interpolated between points
+# Calibrated for casual-competitive friend groups (K/D 1-7, Win% 3-25)
+
 PERCENTILE_CURVES = {
     "K/D": [
-        (0, 0), (0.5, 15), (0.8, 30), (1.0, 50), (1.3, 65),
-        (1.5, 72), (2.0, 85), (2.5, 90), (3.0, 95), (4.0, 98), (6.0, 100),
+        (0, 0), (0.3, 5), (0.5, 10), (0.8, 20), (1.0, 30),
+        (1.3, 40), (1.5, 48), (2.0, 58), (2.5, 66), (3.0, 74),
+        (4.0, 84), (5.0, 90), (6.0, 95), (8.0, 99), (10.0, 100),
     ],
     "Win Rate": [
-        (0, 0), (1, 15), (2, 25), (3, 35), (5, 50), (7, 60),
-        (10, 72), (15, 82), (20, 90), (30, 95), (50, 99), (100, 100),
+        (0, 0), (1, 8), (2, 15), (3, 22), (5, 35), (7, 45),
+        (10, 58), (13, 68), (16, 76), (20, 84), (25, 90),
+        (30, 94), (40, 97), (50, 99), (100, 100),
     ],
     "Kills/Match": [
-        (0, 0), (0.5, 15), (1.0, 30), (1.5, 45), (2.0, 58),
-        (2.5, 68), (3.0, 78), (4.0, 88), (5.0, 93), (7.0, 98), (10.0, 100),
+        (0, 0), (0.5, 10), (1.0, 22), (1.5, 35), (2.0, 46),
+        (2.5, 55), (3.0, 64), (4.0, 76), (5.0, 85), (6.0, 91),
+        (8.0, 96), (10.0, 100),
     ],
     "Score/Match": [
-        (0, 0), (100, 15), (200, 30), (300, 45), (400, 55),
-        (500, 65), (700, 78), (900, 85), (1200, 92), (1500, 96), (2000, 100),
+        (0, 0), (100, 10), (200, 22), (300, 35), (400, 45),
+        (500, 55), (700, 68), (900, 78), (1200, 88), (1500, 94), (2000, 100),
     ],
     "Outlived/Match": [
-        (0, 0), (10, 10), (20, 25), (30, 35), (40, 45),
-        (50, 55), (60, 65), (70, 78), (80, 88), (90, 95), (95, 100),
+        (0, 0), (10, 5), (20, 14), (30, 24), (40, 35),
+        (50, 46), (60, 58), (70, 70), (75, 78), (80, 84),
+        (85, 90), (90, 95), (95, 100),
     ],
 }
 
-# Aliases used by perf_score() - reference the same curve data
+# Curves used by perf_score()
 SCORE_CURVES = {
     "kd": PERCENTILE_CURVES["K/D"],
     "winRate": PERCENTILE_CURVES["Win Rate"],
     "killsPerMatch": PERCENTILE_CURVES["Kills/Match"],
-    "wins": [
-        (0, 0), (1, 20), (2, 35), (3, 45), (5, 55),
-        (7, 65), (10, 75), (15, 85), (20, 90), (30, 95), (50, 100),
-    ],
+    "outlivedPerMatch": PERCENTILE_CURVES["Outlived/Match"],
 }
 
 
@@ -64,18 +65,56 @@ def pct_color(pct):
     return "#1565c0"  # dark blue / poor
 
 
-def perf_score(stats_dict):
-    """Weighted composite: 30% K/D + 25% Win Rate + 25% Kills/Match + 20% Wins."""
+def _activity_multiplier(matches, window_days=7):
+    """Confidence/activity scaling factor.
+
+    Ramps from 0.5 (1 match) to 1.0 at the full confidence threshold,
+    then gives a mild bonus up to 1.08 for heavy volume.
+    """
+    if matches <= 0:
+        return 0
+    full_conf = 15 if window_days <= 7 else 40
+    max_bonus_at = full_conf * 3
+
+    if matches < full_conf:
+        t = matches / full_conf
+        return 0.5 + 0.5 * (t ** 0.5)
+    else:
+        overage = (matches - full_conf) / (max_bonus_at - full_conf)
+        overage = min(overage, 1.0)
+        return 1.0 + 0.08 * overage
+
+
+def perf_score(stats_dict, window_days=7):
+    """Dub Score: 0-100 composite performance rating.
+
+    Components (percentile-based):
+        45% Win Rate       - winning is the point
+        30% K/D            - combat effectiveness
+        25% Outlived/Match - survival / game sense
+
+    Scaled by activity multiplier based on match count.
+    """
     if not stats_dict:
         return None
     o = stats_dict.get("all", {}).get("overall", {})
     if not o or not o.get("matches", 0):
         return None
-    kd_pct = value_to_percentile(o.get("kd", 0) or 0, SCORE_CURVES["kd"])
+
+    matches = o.get("matches", 0) or 0
+
     wr_pct = value_to_percentile(o.get("winRate", 0) or 0, SCORE_CURVES["winRate"])
-    kpm_pct = value_to_percentile(o.get("killsPerMatch", 0) or 0, SCORE_CURVES["killsPerMatch"])
-    wins_pct = value_to_percentile(o.get("wins", 0) or 0, SCORE_CURVES["wins"])
-    return round(0.3 * kd_pct + 0.25 * wr_pct + 0.25 * kpm_pct + 0.2 * wins_pct)
+    kd_pct = value_to_percentile(o.get("kd", 0) or 0, SCORE_CURVES["kd"])
+
+    outlived = o.get("playersOutlived", 0) or 0
+    opm = outlived / max(matches, 1)
+    opm_pct = value_to_percentile(opm, SCORE_CURVES["outlivedPerMatch"])
+
+    raw = 0.45 * wr_pct + 0.30 * kd_pct + 0.25 * opm_pct
+    mult = _activity_multiplier(matches, window_days)
+    scaled = raw * mult
+
+    return min(round(scaled), 100)
 
 
 def score_color(s):
