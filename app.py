@@ -777,12 +777,12 @@ with fn_tab:
 
             # AI Weekly Summary (always uses 7-day data)
             if HAS_ANTHROPIC:
-                # Get API key from env first, then Streamlit secrets
+                # Get API key from env first, then Streamlit secrets (bracket access)
                 _anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
                 if not _anthropic_key:
                     try:
-                        _anthropic_key = st.secrets.get("ANTHROPIC_API_KEY", "")
-                    except Exception:
+                        _anthropic_key = st.secrets["ANTHROPIC_API_KEY"]
+                    except (KeyError, FileNotFoundError):
                         _anthropic_key = ""
 
                 if _anthropic_key:
