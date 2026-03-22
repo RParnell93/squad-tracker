@@ -32,7 +32,7 @@ def card_css(accent="#e94560", badge_color="#e94560"):
         .cards-scroll {{ font-family: 'JetBrains Mono', monospace; }}
         .cards-scroll {{ display: flex; gap: 16px; overflow-x: auto; padding: 8px 0 16px 0; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }}
         .cards-scroll .battle-card {{ min-width: 280px; max-width: 340px; flex: 1 0 280px; scroll-snap-align: start; }}
-        .battle-card {{ background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); border-radius: 16px; padding: 20px; border: 2px solid {accent}; color: white; overflow: hidden; word-wrap: break-word; box-sizing: border-box; font-family: 'JetBrains Mono', monospace; }}
+        .battle-card {{ background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); border-radius: 16px; padding: 20px; border: 2px solid {accent}; color: white; overflow: visible; word-wrap: break-word; box-sizing: border-box; font-family: 'JetBrains Mono', monospace; }}
         .player-name {{ font-size: 1.1em; font-weight: 800; margin-bottom: 4px; color: {accent}; text-transform: uppercase; letter-spacing: 0.5px; }}
         .player-platform {{ font-size: 0.8em; color: #a8a8b3; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }}
         .stat-row {{ display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }}

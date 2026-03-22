@@ -608,9 +608,11 @@ if active_game == "Fortnite":
 
                 is_supreme = name == fn_supreme and len(all_fn) > 1
 
+                _supreme_ribbon = '<div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#ffd700,#ffaa00);color:#1a1a2e;padding:2px 12px;border-radius:10px;font-size:0.55rem;font-weight:800;letter-spacing:0.5px;white-space:nowrap;z-index:1;">SUPREME LEADER</div>' if is_supreme else ''
                 fn_cards_html.append(f"""
-                <div class="battle-card" style="{'border-color:#ffd700;box-shadow:0 0 12px rgba(255,215,0,0.3);' if is_supreme else ''}">
-                    <div class="player-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">{data['account']['name']}{'<span style="background:linear-gradient(90deg,#ffd700,#ffaa00);color:#1a1a2e;padding:1px 6px;border-radius:8px;font-size:0.45em;font-weight:800;letter-spacing:0.5px;white-space:nowrap;">SUPREME LEADER</span>' if is_supreme else ''}</div>
+                <div class="battle-card" style="position:relative;{'border-color:#ffd700;box-shadow:0 0 12px rgba(255,215,0,0.3);margin-top:10px;' if is_supreme else ''}">
+                    {_supreme_ribbon}
+                    <div class="player-name">{data['account']['name']}</div>
                     <div class="player-platform" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">{_plat_tag} <span>BP Lv {bp.get('level', '?')}</span></div>
                     <div style="display: flex; justify-content: center; gap: 16px; margin-bottom: 12px;">
                         {circle_7d}{circle_30d}
@@ -1263,10 +1265,12 @@ elif active_game == "Overwatch 2":
                 dub_score = ow2_dub_scores.get(name)
                 circle_html = score_circle_html(dub_score, "Dub Score")
 
+                _supreme_ribbon_ow = '<div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#ffd700,#ffaa00);color:#1a1a2e;padding:2px 12px;border-radius:10px;font-size:0.55rem;font-weight:800;letter-spacing:0.5px;white-space:nowrap;z-index:1;">SUPREME LEADER</div>' if is_supreme else ''
                 ow2_cards_html.append(f"""
-                <div class="battle-card" style="{'border-color:#ffd700;box-shadow:0 0 12px rgba(255,215,0,0.3);' if is_supreme else ''}">
+                <div class="battle-card" style="position:relative;{'border-color:#ffd700;box-shadow:0 0 12px rgba(255,215,0,0.3);margin-top:10px;' if is_supreme else ''}">
+                    {_supreme_ribbon_ow}
                     {avatar_html}
-                    <div class="player-name" style="display:flex;align-items:center;flex-wrap:nowrap;">{username}{'<span style="background:linear-gradient(90deg,#ffd700,#ffaa00);color:#1a1a2e;padding:1px 6px;border-radius:8px;font-size:0.45em;font-weight:800;margin-left:6px;letter-spacing:0.5px;white-space:nowrap;">SUPREME LEADER</span>' if is_supreme else ''}</div>
+                    <div class="player-name">{username}</div>
                     <div class="player-platform">{title} | Endorsement {endorsement}</div>
                     <div class="player-platform">{rank_icon_html} {rank_text}</div>
                     <div style="display: flex; justify-content: center; gap: 16px; margin-bottom: 12px;">
