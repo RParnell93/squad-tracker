@@ -223,6 +223,19 @@ with fn_tab:
 
             # Helper to get stats for the selected time window
             def get_stats(data, name, time_window):
+                if time_window == "Season" and epic_ids.get(name):
+                    # Use Epic Stats Proxy with season date range if available
+                    aid = epic_ids[name]
+                    start_ts = int(datetime.combine(start_date, datetime.min.time()).timestamp())
+                    end_ts = int(datetime.combine(end_date, datetime.max.time()).timestamp())
+                    cache_key = f"epic_{aid}_{start_ts}_{end_ts}"
+                    cached = st.session_state.get("epic_cache", {}).get(cache_key)
+                    if cached is not None:
+                        return cached
+                    # Fall back to fortnite-api.com season stats
+                    if data.get("season_stats"):
+                        return data["season_stats"]
+                    return None
                 if time_window == "Season" and data.get("season_stats"):
                     return data["season_stats"]
                 if time_window in ("Last 7 Days", "Last 30 Days"):
@@ -248,8 +261,27 @@ with fn_tab:
                 time_options += ["Last 7 Days", "Last 30 Days", "Custom Range"]
             time_window = st.radio("Time Window", time_options, horizontal=True, key="fn_time_window")
 
+            # Known Fortnite seasons (date ranges for Epic Stats Proxy lookup)
+            FORTNITE_SEASONS = {
+                "Ch6 S2 (Current)": (date(2026, 3, 8), date.today()),
+                "Ch6 S1": (date(2025, 12, 1), date(2026, 3, 7)),
+                "Ch5 S4 (Remix)": (date(2025, 9, 27), date(2025, 11, 30)),
+                "Ch5 S3": (date(2025, 6, 14), date(2025, 9, 26)),
+                "Ch5 S2": (date(2025, 3, 8), date(2025, 6, 13)),
+                "Ch5 S1": (date(2024, 12, 3), date(2025, 3, 7)),
+            }
+
             custom_days = None
-            if time_window == "Custom Range":
+            if time_window == "Season" and epic_ids:
+                season_col, _ = st.columns([1, 3])
+                with season_col:
+                    season_pick = st.selectbox(
+                        "Select Season", list(FORTNITE_SEASONS.keys()),
+                        key="fn_season_select"
+                    )
+                start_date, end_date = FORTNITE_SEASONS[season_pick]
+
+            elif time_window == "Custom Range":
                 col_start, col_end = st.columns(2)
                 with col_start:
                     start_date = st.date_input("Start Date", value=date.today() - timedelta(days=14), key="fn_start_date")
@@ -290,6 +322,23 @@ with fn_tab:
                             cache_key = f"epic_{aid}_{days}"
                             if parsed:
                                 st.session_state.epic_cache[cache_key] = epic_parsed_to_mode_stats(parsed)
+                            else:
+                                st.session_state.epic_cache[cache_key] = None
+                            time.sleep(0.3)
+
+            elif time_window == "Season" and epic_ids:
+                start_ts = int(datetime.combine(start_date, datetime.min.time()).timestamp())
+                end_ts = int(datetime.combine(end_date, datetime.max.time()).timestamp())
+                range_key = f"{start_ts}_{end_ts}"
+                missing = [n for n in all_fn if epic_ids.get(n) and f"epic_{epic_ids[n]}_{range_key}" not in st.session_state.epic_cache]
+                if missing:
+                    with st.spinner(f"Loading {season_pick} stats..."):
+                        for name in missing:
+                            aid = epic_ids[name]
+                            parsed_raw = fetch_stats_epic(aid, start_ts, end_ts)
+                            cache_key = f"epic_{aid}_{range_key}"
+                            if parsed_raw:
+                                st.session_state.epic_cache[cache_key] = epic_parsed_to_mode_stats(parse_raw_stats(parsed_raw))
                             else:
                                 st.session_state.epic_cache[cache_key] = None
                             time.sleep(0.3)
