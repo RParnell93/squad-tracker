@@ -540,21 +540,17 @@ with fn_tab:
                     # Try MotherDuck first for historical weeks
                     db_data = None
                     week_ranges = get_all_week_ranges(12)
-                    if not HAS_DUCKDB:
-                        st.caption("duckdb not installed - using API fallback.")
-                    elif "db_trends" not in st.session_state:
+                    if HAS_DUCKDB and "db_trends" not in st.session_state:
                         with st.spinner("Loading trend data from database..."):
                             db_data = fetch_weekly_trends(list(all_fn.keys()), num_weeks=12)
                             if db_data is not None:
                                 st.session_state.db_trends = db_data
-                            else:
-                                st.caption("Database unavailable - check MOTHERDUCK_TOKEN in secrets. Using API fallback.")
                     if "db_trends" in st.session_state:
                         db_data = st.session_state.db_trends
 
                     if db_data is not None:
                         # DB path: use stored weekly data, fetch current week live
-                        st.caption("Historical data from database. Current week from live API.")
+                        st.caption("Source: MotherDuck (historical) + Live API (current week)")
 
                         # Fetch current week (since last Monday) via API if not cached
                         today = date.today()
@@ -618,7 +614,7 @@ with fn_tab:
                             ))
                     else:
                         # Fallback: all API (old behavior)
-                        st.caption("Weekly values from Epic stats proxy. Each point is one week.")
+                        st.caption("Source: Live API (database unavailable)")
 
                         def week_label(i):
                             if i == 0:
