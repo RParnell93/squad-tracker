@@ -790,7 +790,12 @@ with fn_tab:
                         _anthropic_key = ""
 
                 if not _anthropic_key:
-                    st.caption("Add ANTHROPIC_API_KEY to secrets to enable AI summaries.")
+                    # Temporary debug: show available secret keys
+                    try:
+                        _avail = [k for k in st.secrets if k != "epic_device_auth"]
+                        st.caption(f"Add ANTHROPIC_API_KEY to secrets to enable AI summaries. (Available keys: {_avail})")
+                    except Exception:
+                        st.caption("Add ANTHROPIC_API_KEY to secrets to enable AI summaries.")
                 else:
                     st.caption("Powered by Claude. Based on the last 7 days of stats.")
 
