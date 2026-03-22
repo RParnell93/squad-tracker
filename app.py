@@ -7,14 +7,14 @@ from epic_auth import (
     stats_for_window, fetch_stats_epic, parse_raw_stats,
 )
 
-from config import DEFAULT_FORTNITE_PLAYERS, DEFAULT_OW2_PLAYERS, CSS
+from config import DEFAULT_FORTNITE_PLAYERS, DEFAULT_OW2_PLAYERS, CSS, card_css
 from api import (
     fetch_fortnite_stats, epic_parsed_to_mode_stats, fetch_epic_account_ids,
     search_ow2_player, fetch_ow2_stats,
 )
 from metrics import (
     SCORE_CURVES, PERCENTILE_CURVES, value_to_percentile, pct_color,
-    perf_score, score_color, score_circle_html, _interp,
+    perf_score, score_color, score_circle_html,
 )
 from helpers import get_fortnite_api_key, load_squad, save_squad
 
@@ -178,14 +178,14 @@ with fn_tab:
 
     if not fn_api_key:
         st.warning("Enter your Fortnite API key in the sidebar, or add it to .streamlit/secrets.toml")
-        st.stop()
-    if not fn_players:
+    elif not fn_players:
         st.info("Add Fortnite players in the sidebar.")
     else:
         if st.button("Refresh Stats"):
             st.session_state.fn_cache = {}
             st.session_state.pop("epic_ids", None)
             st.session_state.pop("epic_cache", None)
+            st.session_state.pop("trend_cache", None)
 
         all_fn = {}
         for p in fn_players:
@@ -284,9 +284,9 @@ with fn_tab:
             elif time_window == "Custom Range":
                 col_start, col_end = st.columns(2)
                 with col_start:
-                    start_date = st.date_input("Start Date", value=date.today() - timedelta(days=14), key="fn_start_date")
+                    start_date = st.date_input("Start Date", value=date.today() - timedelta(days=14), max_value=date.today(), key="fn_start_date")
                 with col_end:
-                    end_date = st.date_input("End Date", value=date.today(), key="fn_end_date")
+                    end_date = st.date_input("End Date", value=date.today(), max_value=date.today(), key="fn_end_date")
                 if start_date > end_date:
                     st.error("Start date must be before end date.")
                     st.stop()
@@ -395,9 +395,9 @@ with fn_tab:
                 o = player_mode(n)
                 if o and o.get("matches", 0):
                     fn_composite[n] = (
-                        0.4 * _interp(o.get("kd", 0) or 0, SCORE_CURVES["kd"])
-                        + 0.3 * _interp(o.get("winRate", 0) or 0, SCORE_CURVES["winRate"])
-                        + 0.3 * _interp(o.get("killsPerMatch", 0) or 0, SCORE_CURVES["killsPerMatch"])
+                        0.4 * value_to_percentile(o.get("kd", 0) or 0, SCORE_CURVES["kd"])
+                        + 0.3 * value_to_percentile(o.get("winRate", 0) or 0, SCORE_CURVES["winRate"])
+                        + 0.3 * value_to_percentile(o.get("killsPerMatch", 0) or 0, SCORE_CURVES["killsPerMatch"])
                     )
                 else:
                     fn_composite[n] = 0
@@ -473,21 +473,7 @@ with fn_tab:
             # Render all cards in a scrollable row
             cards_joined = "".join(fn_cards_html)
             st.html(f"""
-            <style>
-                .cards-scroll {{ display: flex; gap: 16px; overflow-x: auto; padding: 8px 0 16px 0; }}
-                .cards-scroll .battle-card {{ min-width: 280px; max-width: 340px; flex: 1 0 280px; }}
-                .battle-card {{ background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); border-radius: 16px; padding: 20px; border: 2px solid #e94560; color: white; overflow: hidden; word-wrap: break-word; box-sizing: border-box; }}
-                .player-name {{ font-size: 1.1em; font-weight: 800; margin-bottom: 4px; color: #e94560; text-transform: uppercase; letter-spacing: 1px; }}
-                .player-platform {{ font-size: 0.8em; color: #a8a8b3; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 1px; }}
-                .stat-row {{ display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }}
-                .stat-label {{ color: #a8a8b3; font-size: 0.82em; white-space: nowrap; }}
-                .stat-value {{ color: white; font-weight: 700; font-size: 0.9em; white-space: nowrap; }}
-                .stat-highlight {{ color: #e94560; font-weight: 700; font-size: 0.9em; white-space: nowrap; }}
-                .big-stat {{ text-align: center; padding: 8px; }}
-                .big-stat-value {{ font-size: 1.8em; font-weight: 800; color: white; }}
-                .big-stat-label {{ font-size: 0.7em; color: #a8a8b3; text-transform: uppercase; letter-spacing: 1px; }}
-                .rank-badge {{ display: inline-block; background: #e94560; color: white; padding: 2px 6px; border-radius: 12px; font-size: 0.65em; font-weight: 700; margin-left: 4px; white-space: nowrap; }}
-            </style>
+            {card_css(accent="#e94560", badge_color="#e94560")}
             <div class="cards-scroll">{cards_joined}</div>
             """)
 
@@ -937,23 +923,7 @@ with ow2_tab:
 
             ow2_cards_joined = "".join(ow2_cards_html)
             st.html(f"""
-            <style>
-                .cards-scroll {{ display: flex; gap: 16px; overflow-x: auto; padding: 8px 0 16px 0; }}
-                .cards-scroll .battle-card {{ min-width: 280px; max-width: 340px; flex: 1 0 280px; }}
-                .battle-card {{ background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); border-radius: 16px; padding: 20px; border: 2px solid #f99e1a; color: white; overflow: hidden; word-wrap: break-word; box-sizing: border-box; }}
-                .player-name {{ font-size: 1.1em; font-weight: 800; margin-bottom: 4px; color: #f99e1a; text-transform: uppercase; letter-spacing: 1px; }}
-                .player-platform {{ font-size: 0.8em; color: #a8a8b3; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }}
-                .stat-row {{ display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }}
-                .stat-label {{ color: #a8a8b3; font-size: 0.85em; white-space: nowrap; }}
-                .stat-value {{ color: white; font-weight: 700; font-size: 0.95em; white-space: nowrap; }}
-                .stat-highlight {{ color: #f99e1a; font-weight: 700; font-size: 0.95em; white-space: nowrap; }}
-                .big-stat {{ text-align: center; padding: 8px; }}
-                .big-stat-value {{ font-size: 1.8em; font-weight: 800; color: white; }}
-                .big-stat-label {{ font-size: 0.7em; color: #a8a8b3; text-transform: uppercase; letter-spacing: 1px; }}
-                .rank-badge {{ display: inline-block; background: #f99e1a; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.7em; font-weight: 700; margin-left: 4px; white-space: nowrap; }}
-                .player-avatar {{ width: 64px; height: 64px; border-radius: 50%; border: 2px solid #f99e1a; margin-bottom: 8px; }}
-                .rank-icon {{ width: 40px; height: 40px; vertical-align: middle; margin-right: 6px; }}
-            </style>
+            {card_css(accent="#f99e1a", badge_color="#f99e1a")}
             <div class="cards-scroll">{ow2_cards_joined}</div>
             """)
 

@@ -1,21 +1,5 @@
-# Performance Score curves: composite 0-100 from K/D, Win Rate, Kills/Match percentiles
-SCORE_CURVES = {
-    "kd": [
-        (0, 0), (0.5, 15), (0.8, 30), (1.0, 50), (1.3, 65),
-        (1.5, 72), (2.0, 85), (2.5, 90), (3.0, 95), (4.0, 98), (6.0, 100),
-    ],
-    "winRate": [
-        (0, 0), (1, 15), (2, 25), (3, 35), (5, 50), (7, 60),
-        (10, 72), (15, 82), (20, 90), (30, 95), (50, 99), (100, 100),
-    ],
-    "killsPerMatch": [
-        (0, 0), (0.5, 15), (1.0, 30), (1.5, 45), (2.0, 58),
-        (2.5, 68), (3.0, 78), (4.0, 88), (5.0, 93), (7.0, 98), (10.0, 100),
-    ],
-}
-
-# Community-sourced percentile lookup tables
-# Based on FortniteTracker tier data and community analysis
+# Performance Score and Percentile curves
+# Community-sourced percentile lookup tables based on FortniteTracker tier data
 # Format: list of (value, percentile) tuples - interpolated between points
 PERCENTILE_CURVES = {
     "K/D": [
@@ -40,19 +24,12 @@ PERCENTILE_CURVES = {
     ],
 }
 
-
-def _interp(value, curve):
-    if value <= curve[0][0]:
-        return curve[0][1]
-    if value >= curve[-1][0]:
-        return curve[-1][1]
-    for i in range(len(curve) - 1):
-        v0, p0 = curve[i]
-        v1, p1 = curve[i + 1]
-        if v0 <= value <= v1:
-            t = (value - v0) / (v1 - v0)
-            return p0 + t * (p1 - p0)
-    return 50
+# Aliases used by perf_score() - reference the same curve data
+SCORE_CURVES = {
+    "kd": PERCENTILE_CURVES["K/D"],
+    "winRate": PERCENTILE_CURVES["Win Rate"],
+    "killsPerMatch": PERCENTILE_CURVES["Kills/Match"],
+}
 
 
 def value_to_percentile(value, curve):
@@ -90,9 +67,9 @@ def perf_score(stats_dict):
     o = stats_dict.get("all", {}).get("overall", {})
     if not o or not o.get("matches", 0):
         return None
-    kd_pct = _interp(o.get("kd", 0) or 0, SCORE_CURVES["kd"])
-    wr_pct = _interp(o.get("winRate", 0) or 0, SCORE_CURVES["winRate"])
-    kpm_pct = _interp(o.get("killsPerMatch", 0) or 0, SCORE_CURVES["killsPerMatch"])
+    kd_pct = value_to_percentile(o.get("kd", 0) or 0, SCORE_CURVES["kd"])
+    wr_pct = value_to_percentile(o.get("winRate", 0) or 0, SCORE_CURVES["winRate"])
+    kpm_pct = value_to_percentile(o.get("killsPerMatch", 0) or 0, SCORE_CURVES["killsPerMatch"])
     return round(0.4 * kd_pct + 0.3 * wr_pct + 0.3 * kpm_pct)
 
 
