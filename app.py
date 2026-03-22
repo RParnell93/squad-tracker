@@ -57,9 +57,7 @@ if game_tab == "Fortnite":
     except Exception:
         pass
 
-    if has_secret:
-        st.sidebar.success("API key loaded from secrets")
-    else:
+    if not has_secret:
         api_key_input = st.sidebar.text_input(
             "Fortnite API Key",
             value="",
