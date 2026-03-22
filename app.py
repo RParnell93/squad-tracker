@@ -29,12 +29,24 @@ from db import fetch_weekly_trends, fetch_player_cache, fetch_ow2_cache, get_all
 
 st.set_page_config(page_title="Squad Tracker", page_icon="🎮", layout="wide")
 
-PLOTLY_CONFIG = {"displayModeBar": False, "scrollZoom": False}
+PLOTLY_CONFIG = {
+    "displayModeBar": False,
+    "scrollZoom": False,
+    "doubleClick": False,          # disable double-click to zoom/reset
+    "showTips": False,
+    "staticPlot": True,            # nuclear option: disables ALL interaction including zoom/pan/select
+}
 
 def _lock_axes(fig):
     """Disable all zoom/pan on a Plotly figure by locking every axis."""
     fig.update_xaxes(fixedrange=True)
     fig.update_yaxes(fixedrange=True)
+    # Lock polar axes (radar charts) - fixedrange on x/y doesn't affect polar
+    if fig.layout.polar is not None:
+        fig.update_layout(polar=dict(
+            radialaxis=dict(fixedrange=True),
+            angularaxis=dict(fixedrange=True),
+        ))
     return fig
 
 # ── CSS ──────────────────────────────────────────────────────────────────────
