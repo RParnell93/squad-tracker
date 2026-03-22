@@ -422,8 +422,6 @@ with fn_tab:
                 hours = round((overall.get("minutesPlayed", 0) or 0) / 60, 1)
                 outlived = overall.get("playersOutlived", 0) or 0
                 opm = round(outlived / max(matches, 1), 1)
-                top10 = overall.get("top10", 0) or 0
-                top25 = overall.get("top25", 0) or 0
                 last_on = (overall.get("lastModified", "") or "")[:10]
 
                 s7, s30 = perf_scores.get(name, (None, None))
@@ -452,19 +450,17 @@ with fn_tab:
                         <div class="big-stat"><div class="big-stat-value">{wr:.1f}%</div><div class="big-stat-label">Win Rate</div></div>
                         <div class="big-stat"><div class="big-stat-value">{wins:,}</div><div class="big-stat-label">Wins</div></div>
                     </div>
+                    <div class="stat-row"><span class="stat-label">Matches</span><span class="stat-value">{matches:,}</span></div>
                     <div class="stat-row"><span class="stat-label">Total Kills</span><span class="stat-highlight">{kills:,}{kills_badge}</span></div>
                     <div class="stat-row"><span class="stat-label">Deaths</span><span class="stat-value">{deaths:,}</span></div>
                     <div class="stat-row"><span class="stat-label">K/D Ratio</span><span class="stat-highlight">{kd:.2f}{kd_badge}</span></div>
                     <div class="stat-row"><span class="stat-label">Kills / Match</span><span class="stat-highlight">{kpm:.2f}{kpm_badge}</span></div>
                     <div class="stat-row"><span class="stat-label">Win Rate</span><span class="stat-highlight">{wr:.1f}%{wr_badge}</span></div>
-                    <div class="stat-row"><span class="stat-label">Matches</span><span class="stat-value">{matches:,}</span></div>
                     <div class="stat-row"><span class="stat-label">Score</span><span class="stat-value">{score:,}</span></div>
                     <div class="stat-row"><span class="stat-label">Score / Min</span><span class="stat-value">{spm:.1f}</span></div>
                     <div class="stat-row"><span class="stat-label">Score / Match</span><span class="stat-value">{spmatch:.1f}</span></div>
                     <div class="stat-row"><span class="stat-label">Players Outlived</span><span class="stat-value">{outlived:,}</span></div>
                     <div class="stat-row"><span class="stat-label">Outlived / Match</span><span class="stat-value">{opm}</span></div>
-                    <div class="stat-row"><span class="stat-label">Top 10s</span><span class="stat-value">{top10:,} <span style="color:#90caf9;">({top10 / max(matches, 1) * 100:.1f}%)</span></span></div>
-                    <div class="stat-row"><span class="stat-label">Top 25s</span><span class="stat-value">{top25:,} <span style="color:#90caf9;">({top25 / max(matches, 1) * 100:.1f}%)</span></span></div>
                     <div class="stat-row"><span class="stat-label">Hours Played</span><span class="stat-value">{hours:,.1f}</span></div>
                     <div class="stat-row"><span class="stat-label">Last Active</span><span class="stat-value">{last_on}</span></div>
                 </div>""")
@@ -708,8 +704,6 @@ with fn_tab:
                     "Score/Min": f"{s.get('scorePerMin', 0) or 0:.1f}",
                     "Outlived": f"{s.get('playersOutlived', 0) or 0:,}",
                     "Outlived/Match": f"{(s.get('playersOutlived', 0) or 0) / m:.1f}",
-                    "Top 10": f"{s.get('top10', 0) or 0:,}",
-                    "Top 25": f"{s.get('top25', 0) or 0:,}",
                     "Hours": f"{round((s.get('minutesPlayed', 0) or 0) / 60, 1):,.1f}",
                 })
             if table_data:
@@ -871,7 +865,6 @@ Writing rules:
 | **Score/Match** | Average score per match. |
 | **Players Outlived** | Total players eliminated before you in each match. Higher = better survival. |
 | **Outlived/Match** | Average players outlived per match. Proxy for how deep you go in games. |
-| **Top 10 / Top 25** | Number of matches finishing in the top 10 or top 25. |
 | **Deaths** | Estimated as matches played minus wins (each match ends in either a win or a death). |
 | **Hours Played** | Total minutes played divided by 60. |
 | **BP Level** | Current Battle Pass level for the season. |
