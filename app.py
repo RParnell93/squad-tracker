@@ -408,10 +408,15 @@ with fn_tab:
                     )
             fn_supreme = max(fn_composite, key=fn_composite.get) if fn_composite and max(fn_composite.values()) > 0 else None
 
-            # Battle Cards
+            # Battle Cards - Supreme Leader first
             st.markdown("## Battle Cards")
+            fn_card_order = list(all_fn.keys())
+            if fn_supreme and fn_supreme in fn_card_order:
+                fn_card_order.remove(fn_supreme)
+                fn_card_order.insert(0, fn_supreme)
             fn_cards_html = []
-            for idx, (name, data) in enumerate(all_fn.items()):
+            for idx, name in enumerate(fn_card_order):
+                data = all_fn[name]
                 overall = player_mode(name)
                 bp = data.get("battlePass", {})
                 platform = next((p["platform"] for p in fn_players if p["name"] == name), "")
