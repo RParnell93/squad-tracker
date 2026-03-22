@@ -1281,17 +1281,17 @@ elif active_game == "Overwatch 2":
                     <div style="display: flex; justify-content: space-around; margin-bottom: 16px;">
                         <div class="big-stat"><div class="big-stat-value">{kda:.2f}</div><div class="big-stat-label">KDA</div></div>
                         <div class="big-stat"><div class="big-stat-value">{wins:,}</div><div class="big-stat-label">Dubs</div></div>
-                        <div class="big-stat"><div class="big-stat-value">{avg.get('eliminations', 0):.1f}</div><div class="big-stat-label">Avg Elims</div></div>
+                        <div class="big-stat"><div class="big-stat-value">{avg.get('eliminations', 0) or 0:.1f}</div><div class="big-stat-label">Avg Elims</div></div>
                     </div>
                     <div class="stat-row"><span class="stat-label">Games Played</span><span class="stat-value">{games:,}</span></div>
                     <div class="stat-row"><span class="stat-label">Dubs</span><span class="stat-highlight">{wins:,} <span style="font-size:0.8em;color:rgba(249,158,26,0.45);">{winrate:.1f}%</span>{wins_badge}</span></div>
                     <div class="stat-row"><span class="stat-label">KDA</span><span class="stat-highlight">{kda:.2f}{kda_badge}</span></div>
-                    <div class="stat-row"><span class="stat-label">Eliminations</span><span class="stat-value">{total.get('eliminations', 0):,}</span></div>
-                    <div class="stat-row"><span class="stat-label">Assists</span><span class="stat-value">{total.get('assists', 0):,}</span></div>
-                    <div class="stat-row"><span class="stat-label">Deaths</span><span class="stat-value">{total.get('deaths', 0):,}</span></div>
-                    <div class="stat-row"><span class="stat-label">Avg Elims</span><span class="stat-highlight">{avg.get('eliminations', 0):.1f}{elims_badge}</span></div>
-                    <div class="stat-row"><span class="stat-label">Avg Dmg</span><span class="stat-highlight">{avg.get('damage', 0):,.0f}{dmg_badge}</span></div>
-                    <div class="stat-row"><span class="stat-label">Avg Healing</span><span class="stat-value">{avg.get('healing', 0):,.0f}</span></div>
+                    <div class="stat-row"><span class="stat-label">Eliminations</span><span class="stat-value">{total.get('eliminations', 0) or 0:,}</span></div>
+                    <div class="stat-row"><span class="stat-label">Assists</span><span class="stat-value">{total.get('assists', 0) or 0:,}</span></div>
+                    <div class="stat-row"><span class="stat-label">Deaths</span><span class="stat-value">{total.get('deaths', 0) or 0:,}</span></div>
+                    <div class="stat-row"><span class="stat-label">Avg Elims</span><span class="stat-highlight">{avg.get('eliminations', 0) or 0:.1f}{elims_badge}</span></div>
+                    <div class="stat-row"><span class="stat-label">Avg Dmg</span><span class="stat-highlight">{avg.get('damage', 0) or 0:,.0f}{dmg_badge}</span></div>
+                    <div class="stat-row"><span class="stat-label">Avg Healing</span><span class="stat-value">{avg.get('healing', 0) or 0:,.0f}</span></div>
                     <div class="stat-row"><span class="stat-label">Avg Assists</span><span class="stat-value">{avg.get('assists', 0):.1f}</span></div>
                     <div class="stat-row"><span class="stat-label">Total Damage</span><span class="stat-value">{total.get('damage', 0):,}</span></div>
                     <div class="stat-row"><span class="stat-label">Total Healing</span><span class="stat-value">{total.get('healing', 0):,}</span></div>
@@ -1341,7 +1341,7 @@ elif active_game == "Overwatch 2":
             for n in ow2_names:
                 g = all_ow2[n].get("stats", {}).get("general", {})
                 a = g.get("average", {})
-                raw_ow2[n] = [g.get("kda", 0), g.get("winrate", 0), a.get("eliminations", 0), a.get("damage", 0) / 1000, a.get("healing", 0) / 1000]
+                raw_ow2[n] = [g.get("kda", 0) or 0, g.get("winrate", 0) or 0, a.get("eliminations", 0) or 0, (a.get("damage", 0) or 0) / 1000, (a.get("healing", 0) or 0) / 1000]
 
             fig = go.Figure()
             for n in ow2_names:
