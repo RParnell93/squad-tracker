@@ -29,6 +29,10 @@ SCORE_CURVES = {
     "kd": PERCENTILE_CURVES["K/D"],
     "winRate": PERCENTILE_CURVES["Win Rate"],
     "killsPerMatch": PERCENTILE_CURVES["Kills/Match"],
+    "wins": [
+        (0, 0), (1, 20), (2, 35), (3, 45), (5, 55),
+        (7, 65), (10, 75), (15, 85), (20, 90), (30, 95), (50, 100),
+    ],
 }
 
 
@@ -61,7 +65,7 @@ def pct_color(pct):
 
 
 def perf_score(stats_dict):
-    """Weighted composite: 40% K/D + 30% Win Rate + 30% Kills/Match."""
+    """Weighted composite: 30% K/D + 25% Win Rate + 25% Kills/Match + 20% Wins."""
     if not stats_dict:
         return None
     o = stats_dict.get("all", {}).get("overall", {})
@@ -70,7 +74,8 @@ def perf_score(stats_dict):
     kd_pct = value_to_percentile(o.get("kd", 0) or 0, SCORE_CURVES["kd"])
     wr_pct = value_to_percentile(o.get("winRate", 0) or 0, SCORE_CURVES["winRate"])
     kpm_pct = value_to_percentile(o.get("killsPerMatch", 0) or 0, SCORE_CURVES["killsPerMatch"])
-    return round(0.4 * kd_pct + 0.3 * wr_pct + 0.3 * kpm_pct)
+    wins_pct = value_to_percentile(o.get("wins", 0) or 0, SCORE_CURVES["wins"])
+    return round(0.3 * kd_pct + 0.25 * wr_pct + 0.25 * kpm_pct + 0.2 * wins_pct)
 
 
 def score_color(s):

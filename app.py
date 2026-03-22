@@ -377,7 +377,7 @@ with fn_tab:
             active_names = [n for n in names if perf_scores.get(n, (None, None))[0] is not None
                             and perf_scores[n][0] > 0 and perf_scores[n][1] is not None and perf_scores[n][1] > 0]
             best_kd = max((player_mode(n).get("kd", 0) or 0 for n in active_names), default=0)
-            best_wr = max((player_mode(n).get("winRate", 0) or 0 for n in active_names), default=0)
+            best_wins = max((player_mode(n).get("wins", 0) or 0 for n in active_names), default=0)
             best_kills = max((player_mode(n).get("kills", 0) or 0 for n in active_names), default=0)
             best_kpm = max((player_mode(n).get("killsPerMatch", 0) or 0 for n in active_names), default=0)
 
@@ -427,7 +427,7 @@ with fn_tab:
                 s7, s30 = perf_scores.get(name, (None, None))
                 is_active = name in active_names
                 kd_badge = ' <span class="rank-badge">BEST</span>' if is_active and kd == best_kd and len(all_fn) > 1 and kd > 0 else ""
-                wr_badge = ' <span class="rank-badge">BEST</span>' if is_active and wr == best_wr and len(all_fn) > 1 and wr > 0 else ""
+                wins_badge = ' <span class="rank-badge">BEST</span>' if is_active and wins == best_wins and len(all_fn) > 1 and wins > 0 else ""
                 kills_badge = ' <span class="rank-badge">BEST</span>' if is_active and kills == best_kills and len(all_fn) > 1 and kills > 0 else ""
                 kpm_badge = ' <span class="rank-badge">BEST</span>' if is_active and kpm == best_kpm and len(all_fn) > 1 and kpm > 0 else ""
 
@@ -451,7 +451,7 @@ with fn_tab:
                         <div class="big-stat"><div class="big-stat-value">{kpm:.2f}</div><div class="big-stat-label">Kills/Match</div></div>
                     </div>
                     <div class="stat-row"><span class="stat-label">Matches</span><span class="stat-value">{matches:,}</span></div>
-                    <div class="stat-row"><span class="stat-label">Dubs</span><span class="stat-highlight">{wins:,} <span style="color:#90caf9;">({wr:.1f}%)</span>{wr_badge}</span></div>
+                    <div class="stat-row"><span class="stat-label">Dubs</span><span class="stat-highlight">{wins:,} <span style="color:#90caf9;">({wr:.1f}%)</span>{wins_badge}</span></div>
                     <div class="stat-row"><span class="stat-label">Total Kills</span><span class="stat-highlight">{kills:,}{kills_badge}</span></div>
                     <div class="stat-row"><span class="stat-label">Deaths</span><span class="stat-value">{deaths:,}</span></div>
                     <div class="stat-row"><span class="stat-label">K/D Ratio</span><span class="stat-highlight">{kd:.2f}{kd_badge}</span></div>
