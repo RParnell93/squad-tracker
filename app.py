@@ -1471,7 +1471,6 @@ elif active_game == "Overwatch 2":
                         f"Total Elims {tot.get('eliminations',0):,}, "
                         f"Total Deaths {tot.get('deaths',0):,}"
                     )
-                    from metrics import ow2_perf_score
                     ds = ow2_perf_score(g)
                     if ds is not None:
                         ow2_dub_lines.append(f"{disp}: {ds}/100")
