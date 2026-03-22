@@ -808,24 +808,39 @@ if active_game == "Fortnite":
 
                 display_name = all_fn[rolling_player]["account"]["name"]
 
-                # Show rolling average only (3-week window), raw for cumulative
                 fig = go.Figure()
-                if metric_info.get("cumulative") or len(values) < 3:
-                    plot_values = values
-                else:
-                    plot_values = []
+                if not metric_info.get("cumulative") and len(values) >= 3:
+                    # Faint raw data in background
+                    fig.add_trace(go.Scatter(
+                        x=dates, y=values,
+                        mode="lines+markers",
+                        line=dict(color="rgba(233,69,96,0.2)", width=1),
+                        marker=dict(size=4, color="rgba(233,69,96,0.3)"),
+                        name="Weekly",
+                        hovertemplate="%{x|%b %d}<br>" + rolling_metric + ": %{y}<extra></extra>",
+                    ))
+                    # Bold rolling average on top
+                    rolling = []
                     for i in range(len(values)):
                         window = values[max(0, i - 2):i + 1]
-                        plot_values.append(round(sum(window) / len(window), 2))
-
-                fig.add_trace(go.Scatter(
-                    x=dates, y=plot_values,
-                    mode="lines+markers",
-                    line=dict(color="#e94560", width=3),
-                    marker=dict(size=6),
-                    name=f"{display_name} (3-Wk Avg)" if not metric_info.get("cumulative") else display_name,
-                    hovertemplate="%{x|%b %d}<br>" + rolling_metric + ": %{y}<extra></extra>",
-                ))
+                        rolling.append(round(sum(window) / len(window), 2))
+                    fig.add_trace(go.Scatter(
+                        x=dates, y=rolling,
+                        mode="lines+markers",
+                        line=dict(color="#e94560", width=3),
+                        marker=dict(size=7),
+                        name="3-Wk Rolling Avg",
+                        hovertemplate="%{x|%b %d}<br>Rolling Avg: %{y}<extra></extra>",
+                    ))
+                else:
+                    fig.add_trace(go.Scatter(
+                        x=dates, y=values,
+                        mode="lines+markers",
+                        line=dict(color="#e94560", width=3),
+                        marker=dict(size=6),
+                        name=display_name,
+                        hovertemplate="%{x|%b %d}<br>" + rolling_metric + ": %{y}<extra></extra>",
+                    ))
 
                 fig.update_layout(
                     title=f"{display_name} - {rolling_metric} (12 Weeks)",
