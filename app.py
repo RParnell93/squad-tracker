@@ -41,12 +41,6 @@ def _lock_axes(fig):
     """Disable all zoom/pan on a Plotly figure by locking every axis."""
     fig.update_xaxes(fixedrange=True)
     fig.update_yaxes(fixedrange=True)
-    # Lock polar axes (radar charts) - fixedrange on x/y doesn't affect polar
-    if fig.layout.polar is not None:
-        fig.update_layout(polar=dict(
-            radialaxis=dict(fixedrange=True),
-            angularaxis=dict(fixedrange=True),
-        ))
     return fig
 
 # ── CSS ──────────────────────────────────────────────────────────────────────
