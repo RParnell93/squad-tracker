@@ -32,6 +32,15 @@ st.set_page_config(page_title="Squad Tracker", page_icon="🎮", layout="wide")
 # ── CSS ──────────────────────────────────────────────────────────────────────
 st.markdown(CSS, unsafe_allow_html=True)
 
+# ── Anthropic API key (shared by Fortnite + OW2 AI summaries) ──────────────
+_anthropic_key = ""
+if HAS_ANTHROPIC:
+    _anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not _anthropic_key:
+        try:
+            _anthropic_key = st.secrets["ANTHROPIC_API_KEY"]
+        except (KeyError, FileNotFoundError):
+            _anthropic_key = ""
 
 # ── State / Persistence ─────────────────────────────────────────────────────
 # Build lookup dicts for restoring full player objects from names
@@ -322,13 +331,6 @@ if active_game == "Fortnite":
     if not fn_players:
         st.info("Add Fortnite players in the sidebar.")
     else:
-        _, col_refresh, _ = st.columns([2, 1, 2])
-        if col_refresh.button("Refresh", key="fn_refresh", icon="🔄", width="stretch"):
-            st.session_state.pop("db_player_cache", None)
-            st.session_state.pop("db_trends", None)
-            st.session_state.pop("epic_ids", None)
-            st.session_state.pop("epic_cache", None)
-
         # Load all stats from MotherDuck (populated by daily snapshot)
         if "db_player_cache" not in st.session_state:
             with st.spinner("Loading stats..."):
@@ -949,17 +951,9 @@ if active_game == "Fortnite":
 
             if not HAS_ANTHROPIC:
                 st.caption("Install the `anthropic` package to enable AI summaries.")
+            elif not _anthropic_key:
+                st.caption("Add ANTHROPIC_API_KEY to secrets to enable AI summaries.")
             else:
-                _anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
-                if not _anthropic_key:
-                    try:
-                        _anthropic_key = st.secrets["ANTHROPIC_API_KEY"]
-                    except (KeyError, FileNotFoundError):
-                        _anthropic_key = ""
-
-                if not _anthropic_key:
-                    st.caption("Add ANTHROPIC_API_KEY to secrets to enable AI summaries.")
-                else:
                     st.caption("Powered by Claude. Based on the last 7 days of stats.")
 
                     # Player context for the AI summary
@@ -1152,11 +1146,6 @@ elif active_game == "Overwatch 2":
     if not ow2_players:
         st.info("Add OW2 players in the sidebar.")
     else:
-        _, col_refresh, _ = st.columns([2, 1, 2])
-        if col_refresh.button("Refresh", key="ow2_refresh", icon="🔄", width="stretch"):
-            st.session_state.pop("db_ow2_cache", None)
-            st.session_state.ow2_cache = {}
-
         # Load OW2 stats from MotherDuck (populated by daily snapshot)
         if "db_ow2_cache" not in st.session_state:
             with st.spinner("Loading stats..."):
