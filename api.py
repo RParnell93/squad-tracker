@@ -1,23 +1,30 @@
+import logging
 import requests
 import time
 
 from config import FORTNITE_API, OW2_API
 from epic_auth import get_valid_token, lookup_account_by_name
 
+logger = logging.getLogger(__name__)
+
 
 def fetch_fortnite_stats(name, account_type, api_key):
     """Fetch both lifetime and season stats."""
     result = {}
     for window in ["lifetime", "season"]:
-        resp = requests.get(
-            FORTNITE_API,
-            headers={"Authorization": api_key},
-            params={"name": name, "accountType": account_type, "timeWindow": window},
-            timeout=15,
-        )
-        data = resp.json()
-        if data["status"] == 200:
-            result[window] = data["data"]
+        try:
+            resp = requests.get(
+                FORTNITE_API,
+                headers={"Authorization": api_key},
+                params={"name": name, "accountType": account_type, "timeWindow": window},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if data["status"] == 200:
+                result[window] = data["data"]
+        except requests.RequestException as e:
+            logger.warning("Fortnite API error for %s (%s): %s", name, window, e)
         time.sleep(0.5)
     if result.get("lifetime"):
         # Merge: primary data is lifetime, attach season as extra key
@@ -118,6 +125,7 @@ def search_ow2_player(name):
     for variant in variants:
         try:
             resp = requests.get(f"{OW2_API}/players", params={"name": variant}, timeout=30)
+            resp.raise_for_status()
             data = resp.json()
             results = data.get("results", [])
             public = [r for r in results if r.get("is_public")]
@@ -125,8 +133,8 @@ def search_ow2_player(name):
                 return public[0]
             if results:
                 return results[0]
-        except Exception:
-            pass
+        except requests.RequestException as e:
+            logger.warning("OW2 player search failed for '%s': %s", variant, e)
         time.sleep(1)
     return None
 
@@ -136,18 +144,18 @@ def fetch_ow2_stats(player_id):
     result = {}
     try:
         resp = requests.get(f"{OW2_API}/players/{player_id}/summary", timeout=30)
-        if resp.status_code == 200:
-            result["summary"] = resp.json()
-    except Exception:
-        pass
+        resp.raise_for_status()
+        result["summary"] = resp.json()
+    except requests.RequestException as e:
+        logger.warning("OW2 summary fetch failed for %s: %s", player_id, e)
 
     time.sleep(1)
 
     try:
         resp = requests.get(f"{OW2_API}/players/{player_id}/stats/summary", timeout=30)
-        if resp.status_code == 200:
-            result["stats"] = resp.json()
-    except Exception:
-        pass
+        resp.raise_for_status()
+        result["stats"] = resp.json()
+    except requests.RequestException as e:
+        logger.warning("OW2 stats fetch failed for %s: %s", player_id, e)
 
     return result if result else None

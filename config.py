@@ -5,15 +5,15 @@ FORTNITE_API = "https://fortnite-api.com/v2/stats/br/v2"
 OW2_API = "https://overfast-api.tekrop.fr"
 
 DEFAULT_FORTNITE_PLAYERS = [
-    {"name": "astros44", "type": "xbl", "platform": "Xbox"},
-    {"name": "zippomanjingles", "type": "psn", "platform": "PlayStation"},
-    {"name": "crazy in basye", "type": "xbl", "platform": "Xbox"},
-    {"name": "i7vosunz458", "type": "xbl", "platform": "Xbox"},
-    {"name": "callmepot", "type": "epic", "platform": "Epic (PC)"},
-    {"name": "Jbone", "type": "epic", "platform": "Epic (PC)"},
-    {"name": "hailedcanvas141", "type": "xbl", "platform": "Xbox"},
-    {"name": "mrfox733", "type": "xbl", "platform": "Xbox"},
-    {"name": "gascan46310", "type": "xbl", "platform": "Xbox"},
+    {"name": "astros44", "type": "xbl", "platform": "Xbox", "epic_name": "TLP_ReMuS"},
+    {"name": "zippomanjingles", "type": "psn", "platform": "PlayStation", "epic_name": "Zippomanjingles"},
+    {"name": "crazy in basye", "type": "xbl", "platform": "Xbox", "epic_name": "Crazy in Basye"},
+    {"name": "i7vosunz458", "type": "xbl", "platform": "Xbox", "epic_name": "i7VoSUNZ458"},
+    {"name": "callmepot", "type": "epic", "platform": "Epic (PC)", "epic_name": "callmepot"},
+    {"name": "Jbone", "type": "epic", "platform": "Epic (PC)", "epic_name": "Jbone"},
+    {"name": "hailedcanvas141", "type": "xbl", "platform": "Xbox", "epic_name": "DANDEBORD"},
+    {"name": "mrfox733", "type": "xbl", "platform": "Xbox", "epic_name": "mrfox733"},
+    {"name": "gascan46310", "type": "xbl", "platform": "Xbox", "epic_name": "Gascan46310"},
 ]
 
 DEFAULT_OW2_PLAYERS = [
@@ -28,102 +28,30 @@ DEFAULT_OW2_PLAYERS = [
     {"name": "i7vosunz458"},
 ]
 
+# Shared card CSS used in st.html() blocks (scoped) - parameterized by accent color
+def card_css(accent="#e94560", badge_color="#e94560"):
+    return f"""
+    <style>
+        .cards-scroll {{ display: flex; gap: 16px; overflow-x: auto; padding: 8px 0 16px 0; }}
+        .cards-scroll .battle-card {{ min-width: 280px; max-width: 340px; flex: 1 0 280px; }}
+        .battle-card {{ background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); border-radius: 16px; padding: 20px; border: 2px solid {accent}; color: white; overflow: hidden; word-wrap: break-word; box-sizing: border-box; }}
+        .player-name {{ font-size: 1.1em; font-weight: 800; margin-bottom: 4px; color: {accent}; text-transform: uppercase; letter-spacing: 1px; }}
+        .player-platform {{ font-size: 0.8em; color: #a8a8b3; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }}
+        .stat-row {{ display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }}
+        .stat-label {{ color: #a8a8b3; font-size: 0.82em; white-space: nowrap; }}
+        .stat-value {{ color: white; font-weight: 700; font-size: 0.9em; white-space: nowrap; }}
+        .stat-highlight {{ color: {accent}; font-weight: 700; font-size: 0.9em; white-space: nowrap; }}
+        .big-stat {{ text-align: center; padding: 8px; }}
+        .big-stat-value {{ font-size: 1.8em; font-weight: 800; color: white; }}
+        .big-stat-label {{ font-size: 0.7em; color: #a8a8b3; text-transform: uppercase; letter-spacing: 1px; }}
+        .rank-badge {{ display: inline-block; background: {badge_color}; color: white; padding: 2px 6px; border-radius: 12px; font-size: 0.65em; font-weight: 700; margin-left: 4px; white-space: nowrap; }}
+        .player-avatar {{ width: 64px; height: 64px; border-radius: 50%; border: 2px solid {accent}; margin-bottom: 8px; }}
+        .rank-icon {{ width: 40px; height: 40px; vertical-align: middle; margin-right: 6px; }}
+    </style>"""
+
+# Global CSS - minimal styles for non-card elements (cards use scoped styles in st.html)
 CSS = """
 <style>
-    .battle-card {
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-        border-radius: 16px;
-        padding: 20px;
-        margin: 8px 0;
-        border: 2px solid #e94560;
-        color: white;
-        position: relative;
-        overflow: hidden;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-    }
-    .battle-card.ow2 {
-        border-color: #f99e1a;
-    }
-    .battle-card.ow2 .player-name,
-    .battle-card.ow2 .stat-highlight,
-    .battle-card.ow2 .mode-title {
-        color: #f99e1a;
-    }
-    .battle-card.ow2 .rank-badge {
-        background: #f99e1a;
-    }
-    .battle-card::before {
-        content: '';
-        position: absolute;
-        top: -50%;
-        left: -50%;
-        width: 200%;
-        height: 200%;
-        background: radial-gradient(circle, rgba(233,69,96,0.1) 0%, transparent 70%);
-        pointer-events: none;
-    }
-    .player-name {
-        font-size: 1.1em;
-        font-weight: 800;
-        margin-bottom: 4px;
-        color: #e94560;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        word-break: break-word;
-    }
-    .player-platform {
-        font-size: 0.8em;
-        color: #a8a8b3;
-        margin-bottom: 16px;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    .stat-row {
-        display: flex;
-        justify-content: space-between;
-        padding: 6px 0;
-        border-bottom: 1px solid rgba(255,255,255,0.08);
-    }
-    .stat-label {
-        color: #a8a8b3;
-        font-size: 0.85em;
-    }
-    .stat-value {
-        color: white;
-        font-weight: 700;
-        font-size: 0.95em;
-    }
-    .stat-highlight {
-        color: #e94560;
-        font-weight: 700;
-        font-size: 0.95em;
-    }
-    .big-stat {
-        text-align: center;
-        padding: 8px;
-    }
-    .big-stat-value {
-        font-size: 1.8em;
-        font-weight: 800;
-        color: white;
-    }
-    .big-stat-label {
-        font-size: 0.7em;
-        color: #a8a8b3;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    .rank-badge {
-        display: inline-block;
-        background: #e94560;
-        color: white;
-        padding: 2px 10px;
-        border-radius: 12px;
-        font-size: 0.75em;
-        font-weight: 700;
-        margin-left: 8px;
-    }
     .mode-tab {
         background: rgba(255,255,255,0.05);
         border-radius: 8px;
@@ -136,19 +64,6 @@ CSS = """
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 1px;
-        margin-bottom: 8px;
-    }
-    .rank-icon {
-        width: 40px;
-        height: 40px;
-        vertical-align: middle;
-        margin-right: 6px;
-    }
-    .player-avatar {
-        width: 64px;
-        height: 64px;
-        border-radius: 50%;
-        border: 2px solid #f99e1a;
         margin-bottom: 8px;
     }
 </style>

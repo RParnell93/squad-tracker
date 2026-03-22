@@ -18,33 +18,11 @@ from datetime import date, timedelta
 
 import duckdb
 
-# Load .env if present
-env_path = os.path.join(os.path.dirname(__file__), ".env")
-if os.path.exists(env_path):
-    with open(env_path) as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, v = line.split("=", 1)
-                os.environ.setdefault(k.strip(), v.strip())
-
+from config import DEFAULT_FORTNITE_PLAYERS
 from epic_auth import get_valid_token, lookup_account_by_name, fetch_stats_epic, parse_raw_stats
 
 MOTHERDUCK_TOKEN = os.environ.get("MOTHERDUCK_TOKEN", "")
 DB_URL = f"md:squad_tracker?motherduck_token={MOTHERDUCK_TOKEN}"
-
-# All Fortnite players to track - use Epic display names for lookup
-PLAYERS = [
-    {"name": "astros44", "epic_name": "TLP_ReMuS"},
-    {"name": "zippomanjingles", "epic_name": "Zippomanjingles"},
-    {"name": "crazy in basye", "epic_name": "Crazy in Basye"},
-    {"name": "i7vosunz458", "epic_name": "i7VoSUNZ458"},
-    {"name": "callmepot", "epic_name": "callmepot"},
-    {"name": "Jbone", "epic_name": "Jbone"},
-    {"name": "hailedcanvas141", "epic_name": "DANDEBORD"},
-    {"name": "mrfox733", "epic_name": "mrfox733"},
-    {"name": "gascan46310", "epic_name": "Gascan46310"},
-]
 
 
 def get_connection():
@@ -88,7 +66,7 @@ def resolve_account_ids():
         return {}
 
     ids = {}
-    for p in PLAYERS:
+    for p in DEFAULT_FORTNITE_PLAYERS:
         display = p.get("epic_name", p["name"])
         result = lookup_account_by_name(display, token)
         if result:
