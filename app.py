@@ -84,13 +84,13 @@ if game_tab == "Fortnite":
     if available_presets:
         preset_names = ["-- Select a friend --"] + [f"{p['name']} ({p['platform']})" for p in available_presets]
         preset_choice = st.sidebar.selectbox("Quick Add", preset_names, key="fn_preset")
-        if st.sidebar.button("Add Selected", key="fn_preset_add", use_container_width=True):
+        if st.sidebar.button("Add Selected", key="fn_preset_add", width="stretch"):
             idx = preset_names.index(preset_choice) - 1
             if idx >= 0:
                 st.session_state.squad["fortnite_players"].append(available_presets[idx])
                 save_squad(st.session_state.squad)
                 st.rerun()
-        if st.sidebar.button("Add All Friends", key="fn_preset_all", use_container_width=True):
+        if st.sidebar.button("Add All Friends", key="fn_preset_all", width="stretch"):
             st.session_state.squad["fortnite_players"].extend(available_presets)
             save_squad(st.session_state.squad)
             st.rerun()
@@ -100,7 +100,7 @@ if game_tab == "Fortnite":
     new_name = col1.text_input("Gamertag / Epic Name", key="fn_new_name")
     new_platform = col2.selectbox("Platform", list(platform_map.keys()), key="fn_platform")
 
-    if st.sidebar.button("Add Player", key="fn_add", use_container_width=True):
+    if st.sidebar.button("Add Player", key="fn_add", width="stretch"):
         if new_name.strip():
             st.session_state.squad["fortnite_players"].append({
                 "name": new_name.strip(),
@@ -134,13 +134,13 @@ else:  # OW2
     if ow2_available:
         ow2_preset_names = ["-- Select a friend --"] + [p["name"] for p in ow2_available]
         ow2_choice = st.sidebar.selectbox("Quick Add", ow2_preset_names, key="ow2_preset")
-        if st.sidebar.button("Add Selected", key="ow2_preset_add", use_container_width=True):
+        if st.sidebar.button("Add Selected", key="ow2_preset_add", width="stretch"):
             ow2_idx = ow2_preset_names.index(ow2_choice) - 1
             if ow2_idx >= 0:
                 st.session_state.squad["ow2_players"].append(ow2_available[ow2_idx])
                 save_squad(st.session_state.squad)
                 st.rerun()
-        if st.sidebar.button("Add All Friends", key="ow2_preset_all", use_container_width=True):
+        if st.sidebar.button("Add All Friends", key="ow2_preset_all", width="stretch"):
             st.session_state.squad["ow2_players"].extend(ow2_available)
             save_squad(st.session_state.squad)
             st.rerun()
@@ -148,7 +148,7 @@ else:  # OW2
     st.sidebar.caption("Or add manually (display name, profile must be public):")
     new_ow2 = st.sidebar.text_input("Display Name", key="ow2_new_name")
 
-    if st.sidebar.button("Add Player", key="ow2_add", use_container_width=True):
+    if st.sidebar.button("Add Player", key="ow2_add", width="stretch"):
         if new_ow2.strip():
             st.session_state.squad["ow2_players"].append({"name": new_ow2.strip()})
             save_squad(st.session_state.squad)
@@ -181,7 +181,7 @@ with fn_tab:
     if not fn_players:
         st.info("Add Fortnite players in the sidebar.")
     else:
-        if st.button("Refresh Stats", use_container_width=True):
+        if st.button("Refresh Stats", width="stretch"):
             st.session_state.pop("db_player_cache", None)
             st.session_state.pop("db_trends", None)
             st.session_state.pop("epic_ids", None)
@@ -550,7 +550,7 @@ with fn_tab:
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10)),
                     margin=dict(t=60, b=40),
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
             render_trend()
 
@@ -627,13 +627,13 @@ with fn_tab:
                 colors = ["#e94560" if v == max(kds) else "#16213e" for v in kds]
                 fig = go.Figure(go.Bar(x=display_names, y=kds, marker_color=colors, text=[f"{v:.2f}" for v in kds], textposition="outside"))
                 fig.update_layout(title="K/D Ratio", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="K/D", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
             with c2:
                 wrs = [player_mode(n).get("winRate", 0) or 0 for n in names]
                 colors = ["#e94560" if v == max(wrs) else "#16213e" for v in wrs]
                 fig = go.Figure(go.Bar(x=display_names, y=wrs, marker_color=colors, text=[f"{v:.1f}%" for v in wrs], textposition="outside"))
                 fig.update_layout(title="Win Rate", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Win %", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
             c3, c4 = st.columns(2)
             with c3:
@@ -641,13 +641,13 @@ with fn_tab:
                 colors = ["#e94560" if v == max(kpms) else "#16213e" for v in kpms]
                 fig = go.Figure(go.Bar(x=display_names, y=kpms, marker_color=colors, text=[f"{v:.2f}" for v in kpms], textposition="outside"))
                 fig.update_layout(title="Kills / Match", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Kills", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
             with c4:
                 spms = [player_mode(n).get("scorePerMatch", 0) or 0 for n in names]
                 colors = ["#e94560" if v == max(spms) else "#16213e" for v in spms]
                 fig = go.Figure(go.Bar(x=display_names, y=spms, marker_color=colors, text=[f"{v:.0f}" for v in spms], textposition="outside"))
                 fig.update_layout(title="Score / Match", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Score", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
             # Radar - normalize each stat to 0-100 across squad
             st.markdown("### Skill Radar")
@@ -681,7 +681,7 @@ with fn_tab:
                 ))
             fig.update_layout(polar=dict(bgcolor="rgba(0,0,0,0)", radialaxis=dict(visible=True, range=[0, 105], color="#a8a8b3", showticklabels=False), angularaxis=dict(color="#a8a8b3")),
                               template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=420, font=dict(color="white"))
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
             # Game Mode Breakdown
             st.markdown("---")
@@ -713,7 +713,7 @@ with fn_tab:
                     "Hours": f"{round((s.get('minutesPlayed', 0) or 0) / 60, 1):,.1f}",
                 })
             if table_data:
-                st.dataframe(table_data, use_container_width=True, hide_index=True)
+                st.dataframe(table_data, width="stretch", hide_index=True)
 
 
             # AI Weekly Summary
@@ -803,7 +803,7 @@ with fn_tab:
 
                         col_btn, _ = st.columns([1, 2])
                         with col_btn:
-                            generate_clicked = st.button("Generate AI Summary", key="ai_summary_btn", type="primary", use_container_width=True)
+                            generate_clicked = st.button("Generate AI Summary", key="ai_summary_btn", type="primary", width="stretch")
 
                         if generate_clicked and cache_key not in st.session_state:
                             with st.spinner("Generating weekly summary..."):
@@ -897,7 +897,7 @@ with ow2_tab:
     if not ow2_players:
         st.info("Add OW2 players in the sidebar (switch to Overwatch 2 first).")
     else:
-        if st.button("Refresh Stats", key="ow2_refresh", use_container_width=True):
+        if st.button("Refresh Stats", key="ow2_refresh", width="stretch"):
             st.session_state.ow2_cache = {}
 
         all_ow2 = {}
@@ -1043,13 +1043,13 @@ with ow2_tab:
                 colors = ["#f99e1a" if v == max(kdas) else "#16213e" for v in kdas]
                 fig = go.Figure(go.Bar(x=ow2_display, y=kdas, marker_color=colors, text=[f"{v:.2f}" for v in kdas], textposition="outside"))
                 fig.update_layout(title="KDA", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
             with c2:
                 wrs = [all_ow2[n].get("stats", {}).get("general", {}).get("winrate", 0) for n in ow2_names]
                 colors = ["#f99e1a" if v == max(wrs) else "#16213e" for v in wrs]
                 fig = go.Figure(go.Bar(x=ow2_display, y=wrs, marker_color=colors, text=[f"{v:.1f}%" for v in wrs], textposition="outside"))
                 fig.update_layout(title="Win Rate", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
             c3, c4 = st.columns(2)
             with c3:
@@ -1057,13 +1057,13 @@ with ow2_tab:
                 colors = ["#f99e1a" if v == max(dmgs) else "#16213e" for v in dmgs]
                 fig = go.Figure(go.Bar(x=ow2_display, y=dmgs, marker_color=colors, text=[f"{v:,.0f}" for v in dmgs], textposition="outside"))
                 fig.update_layout(title="Avg Damage / Game", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
             with c4:
                 heals = [all_ow2[n].get("stats", {}).get("general", {}).get("average", {}).get("healing", 0) for n in ow2_names]
                 colors = ["#f99e1a" if v == max(heals) else "#16213e" for v in heals]
                 fig = go.Figure(go.Bar(x=ow2_display, y=heals, marker_color=colors, text=[f"{v:,.0f}" for v in heals], textposition="outside"))
                 fig.update_layout(title="Avg Healing / Game", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
             # Radar - normalize each stat to 0-100 across squad
             st.markdown("### Skill Radar")
@@ -1090,7 +1090,7 @@ with ow2_tab:
                 ))
             fig.update_layout(polar=dict(bgcolor="rgba(0,0,0,0)", radialaxis=dict(visible=True, range=[0, 105], color="#a8a8b3", showticklabels=False), angularaxis=dict(color="#a8a8b3")),
                               template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=420, font=dict(color="white"))
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
             # Role breakdown table
             st.markdown("---")
@@ -1124,7 +1124,7 @@ with ow2_tab:
                     "Hours": f"{round(g.get('time_played', 0) / 3600, 1):,.1f}",
                 })
             if table_data:
-                st.dataframe(table_data, use_container_width=True, hide_index=True)
+                st.dataframe(table_data, width="stretch", hide_index=True)
 
             # Hero Breakdown
             st.markdown("---")
@@ -1150,7 +1150,7 @@ with ow2_tab:
                         "Hours": round(h.get("time_played", 0) / 3600, 1),
                     })
                 hero_data.sort(key=lambda x: x["Games"], reverse=True)
-                st.dataframe(hero_data, use_container_width=True, hide_index=True)
+                st.dataframe(hero_data, width="stretch", hide_index=True)
 
                 # Top 5 heroes bar chart
                 top5 = hero_data[:5]
@@ -1160,7 +1160,7 @@ with ow2_tab:
                     fig.add_trace(go.Bar(name="KDA", x=[h["Hero"] for h in top5], y=[h["KDA"] for h in top5], marker_color="#e94560"))
                     fig.update_layout(title=f"{hero_player}'s Top 5 Heroes", barmode="group", template="plotly_dark",
                                       plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
             else:
                 st.caption("No hero data available for this player.")
 
