@@ -769,21 +769,19 @@ if active_game == "Fortnite":
             @st.fragment
             def render_player_trend():
                 PLAYER_METRICS = {
-                    "Cumulative Dubs": {"key": "wins", "fmt": lambda v: int(v), "axis": "Total Wins", "cumulative": True},
-                    "K/D Ratio": {"key": "kd", "fmt": lambda v: round(v, 2), "axis": "K/D"},
-                    "Kills/Game": {"key": "kills_per_match", "fmt": lambda v: round(v, 2), "axis": "Kills per Match"},
-                    "Win Rate": {"key": "win_rate", "fmt": lambda v: round(v, 1), "axis": "Win Rate %"},
+                    "Dubs": {"key": "wins", "fmt": lambda v: int(v), "axis": "Total Wins", "cumulative": True},
+                    "K/D": {"key": "kd", "fmt": lambda v: round(v, 2), "axis": "K/D"},
+                    "K/M": {"key": "kills_per_match", "fmt": lambda v: round(v, 2), "axis": "Kills per Match"},
+                    "Win%": {"key": "win_rate", "fmt": lambda v: round(v, 1), "axis": "Win Rate %"},
                 }
 
-                _dd_display = [all_fn[n]["account"]["name"] for n in names]
-                _dd_map = dict(zip(_dd_display, names))
-                col_player, col_metric, _ = st.columns([1, 1, 1])
+                col_player, col_metric = st.columns([1, 2])
                 with col_player:
-                    _dd_pick = st.segmented_control(
-                        "Player", _dd_display, default=_dd_display[0],
+                    rolling_player = st.selectbox(
+                        "Player", names,
+                        format_func=lambda n: all_fn[n]["account"]["name"],
                         key="player_trend_select",
                     )
-                    rolling_player = _dd_map.get(_dd_pick, names[0])
                 _pm_opts = list(PLAYER_METRICS.keys())
                 with col_metric:
                     rolling_metric = st.segmented_control(
