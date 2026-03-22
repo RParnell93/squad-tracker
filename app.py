@@ -246,19 +246,6 @@ with st.sidebar:
                 _save_and_sync(st.session_state.squad)
                 st.rerun()
 
-        with st.expander("Add Custom Player", expanded=False):
-            new_name = st.text_input("Gamertag", key="fn_new_name", label_visibility="collapsed", placeholder="Gamertag / Epic Name")
-            new_platform = st.selectbox("Platform", list(platform_map.keys()), key="fn_platform")
-            if st.button("Add Player", key="fn_add", width="stretch"):
-                if new_name.strip():
-                    st.session_state.squad["fortnite_players"].append({
-                        "name": new_name.strip(),
-                        "type": platform_map[new_platform],
-                        "platform": new_platform,
-                    })
-                    _save_and_sync(st.session_state.squad)
-                    st.rerun()
-
         st.markdown("---")
         _platform_colors = {"Xbox": "#2d9f2d", "PlayStation": "#006fcd", "Epic (PC)": "#6b6b7b"}
         _plat_short = {"Xbox": "XBOX", "PlayStation": "PSN", "Epic (PC)": "PC"}
@@ -281,6 +268,19 @@ with st.sidebar:
             _save_and_sync(st.session_state.squad)
             st.rerun()
 
+        with st.expander("Search For Player", expanded=False):
+            new_name = st.text_input("Gamertag", key="fn_new_name", label_visibility="collapsed", placeholder="Gamertag / Epic Name")
+            new_platform = st.selectbox("Platform", list(platform_map.keys()), key="fn_platform")
+            if st.button("Add Player", key="fn_add", width="stretch"):
+                if new_name.strip():
+                    st.session_state.squad["fortnite_players"].append({
+                        "name": new_name.strip(),
+                        "type": platform_map[new_platform],
+                        "platform": new_platform,
+                    })
+                    _save_and_sync(st.session_state.squad)
+                    st.rerun()
+
     else:  # OW2
         ow2_preset_players = list(DEFAULT_OW2_PLAYERS)
         ow2_current = {p["name"] for p in st.session_state.squad.get("ow2_players", [])}
@@ -302,14 +302,6 @@ with st.sidebar:
                 _save_and_sync(st.session_state.squad)
                 st.rerun()
 
-        with st.expander("Add Custom Player"):
-            new_ow2 = st.text_input("Display Name", key="ow2_new_name", label_visibility="collapsed", placeholder="BattleTag (public profile)")
-            if st.button("Add Player", key="ow2_add", width="stretch"):
-                if new_ow2.strip():
-                    st.session_state.squad["ow2_players"].append({"name": new_ow2.strip()})
-                    _save_and_sync(st.session_state.squad)
-                    st.rerun()
-
         st.markdown("---")
         ow2_list = st.session_state.squad.get("ow2_players", [])
         if ow2_list:
@@ -324,6 +316,14 @@ with st.sidebar:
             st.session_state.squad["ow2_players"].pop(to_remove)
             _save_and_sync(st.session_state.squad)
             st.rerun()
+
+        with st.expander("Search For Player", expanded=False):
+            new_ow2 = st.text_input("Display Name", key="ow2_new_name", label_visibility="collapsed", placeholder="BattleTag (public profile)")
+            if st.button("Add Player", key="ow2_add", width="stretch"):
+                if new_ow2.strip():
+                    st.session_state.squad["ow2_players"].append({"name": new_ow2.strip()})
+                    _save_and_sync(st.session_state.squad)
+                    st.rerun()
 
     st.markdown("---")
     st.markdown('<div class="sidebar-share"><p>Your squad auto-saves in this browser. Share the link to let friends load your squad.</p></div>', unsafe_allow_html=True)
