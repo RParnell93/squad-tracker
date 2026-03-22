@@ -1367,80 +1367,90 @@ elif active_game == "Overwatch 2":
 
             # Role breakdown table
             st.markdown("---")
-            st.markdown("## Role Breakdown")
-            role_sel = st.selectbox("Select View", ["Overall", "Tank", "Damage", "Support"], key="ow2_role")
-            table_data = []
-            for n in ow2_names:
-                s = all_ow2[n].get("stats", {})
-                if role_sel == "Overall":
-                    g = s.get("general", {})
-                else:
-                    g = s.get("roles", {}).get(role_sel.lower(), {})
-                if not g:
-                    continue
-                a = g.get("average", {})
-                t = g.get("total", {})
-                _wins = g.get('games_won', 0) or 0
-                _wr = g.get('winrate', 0) or 0
-                table_data.append({
-                    "Player": all_ow2[n].get("summary", {}).get("username", n),
-                    "Games": f"{g.get('games_played', 0):,}",
-                    "Dubs": f"{_wins:,} ({_wr:.1f}%)",
-                    "KDA": f"{g.get('kda', 0):.2f}",
-                    "Elims": f"{t.get('eliminations', 0):,}",
-                    "Assists": f"{t.get('assists', 0):,}",
-                    "Deaths": f"{t.get('deaths', 0):,}",
-                    "Avg Elims": f"{a.get('eliminations', 0):.1f}",
-                    "Avg Dmg": f"{a.get('damage', 0):,.0f}",
-                    "Avg Healing": f"{a.get('healing', 0):,.0f}",
-                    "Hours": f"{round(g.get('time_played', 0) / 3600, 1):,.1f}",
-                })
-            if table_data:
-                st.dataframe(table_data, width="stretch", hide_index=True)
+
+            @st.fragment
+            def role_breakdown():
+                st.markdown("## Role Breakdown")
+                role_sel = st.selectbox("Select View", ["Overall", "Tank", "Damage", "Support"], key="ow2_role")
+                table_data = []
+                for n in ow2_names:
+                    s = all_ow2[n].get("stats", {})
+                    if role_sel == "Overall":
+                        g = s.get("general", {})
+                    else:
+                        g = s.get("roles", {}).get(role_sel.lower(), {})
+                    if not g:
+                        continue
+                    a = g.get("average", {})
+                    t = g.get("total", {})
+                    _wins = g.get('games_won', 0) or 0
+                    _wr = g.get('winrate', 0) or 0
+                    table_data.append({
+                        "Player": all_ow2[n].get("summary", {}).get("username", n),
+                        "Games": f"{g.get('games_played', 0):,}",
+                        "Dubs": f"{_wins:,} ({_wr:.1f}%)",
+                        "KDA": f"{g.get('kda', 0):.2f}",
+                        "Elims": f"{t.get('eliminations', 0):,}",
+                        "Assists": f"{t.get('assists', 0):,}",
+                        "Deaths": f"{t.get('deaths', 0):,}",
+                        "Avg Elims": f"{a.get('eliminations', 0):.1f}",
+                        "Avg Dmg": f"{a.get('damage', 0):,.0f}",
+                        "Avg Healing": f"{a.get('healing', 0):,.0f}",
+                        "Hours": f"{round(g.get('time_played', 0) / 3600, 1):,.1f}",
+                    })
+                if table_data:
+                    st.dataframe(table_data, width="stretch", hide_index=True)
+
+            role_breakdown()
 
             # Hero Breakdown
             st.markdown("---")
-            st.markdown("## Hero Breakdown")
-            hero_player = st.selectbox("Select Player", ow2_display, key="ow2_hero_player")
-            hero_player_key = ow2_names[ow2_display.index(hero_player)]
-            heroes = all_ow2[hero_player_key].get("stats", {}).get("heroes", {})
-            if heroes:
-                hero_data = []
-                for hero_name, h in heroes.items():
-                    if h.get("games_played", 0) == 0:
-                        continue
-                    ha = h.get("average", {})
-                    ht = h.get("total", {})
-                    hero_data.append({
-                        "Hero": hero_name.replace("-", " ").title(),
-                        "Games": h.get("games_played", 0),
-                        "Win%": round(h.get("winrate", 0), 1),
-                        "KDA": round(h.get("kda", 0), 2),
-                        "Avg Elims": round(ha.get("eliminations", 0), 1),
-                        "Avg Dmg": round(ha.get("damage", 0)),
-                        "Avg Healing": round(ha.get("healing", 0)),
-                        "Hours": round(h.get("time_played", 0) / 3600, 1),
-                    })
-                hero_data.sort(key=lambda x: x["Games"], reverse=True)
-                st.dataframe(hero_data, width="stretch", hide_index=True)
 
-                # Top 5 heroes bar chart
-                top5 = hero_data[:5]
-                if top5:
-                    fig = go.Figure()
-                    fig.add_trace(go.Bar(name="Avg Elims", x=[h["Hero"] for h in top5], y=[h["Avg Elims"] for h in top5], marker_color="#f99e1a"))
-                    fig.add_trace(go.Scatter(name="KDA", x=[h["Hero"] for h in top5], y=[h["KDA"] for h in top5],
-                                             mode="lines+markers+text", text=[f"{h['KDA']:.2f}" for h in top5], textposition="top center",
-                                             textfont=dict(size=11, color="#e94560"),
-                                             line=dict(color="#e94560", width=2.5), marker=dict(size=8, color="#e94560"),
-                                             yaxis="y2"))
-                    fig.update_layout(title=f"{hero_player}'s Top 5 Heroes", template="plotly_dark",
-                                      plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350,
-                                      font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80),
-                                      yaxis=dict(title="Avg Elims"), yaxis2=dict(title="KDA", overlaying="y", side="right", showgrid=False))
-                    st.plotly_chart(fig, width="stretch")
-            else:
-                st.caption("No hero data available for this player.")
+            @st.fragment
+            def hero_breakdown():
+                st.markdown("## Hero Breakdown")
+                hero_player = st.selectbox("Select Player", ow2_display, key="ow2_hero_player")
+                hero_player_key = ow2_names[ow2_display.index(hero_player)]
+                heroes = all_ow2[hero_player_key].get("stats", {}).get("heroes", {})
+                if heroes:
+                    hero_data = []
+                    for hero_name, h in heroes.items():
+                        if h.get("games_played", 0) == 0:
+                            continue
+                        ha = h.get("average", {})
+                        ht = h.get("total", {})
+                        hero_data.append({
+                            "Hero": hero_name.replace("-", " ").title(),
+                            "Games": h.get("games_played", 0),
+                            "Win%": round(h.get("winrate", 0), 1),
+                            "KDA": round(h.get("kda", 0), 2),
+                            "Avg Elims": round(ha.get("eliminations", 0), 1),
+                            "Avg Dmg": round(ha.get("damage", 0)),
+                            "Avg Healing": round(ha.get("healing", 0)),
+                            "Hours": round(h.get("time_played", 0) / 3600, 1),
+                        })
+                    hero_data.sort(key=lambda x: x["Games"], reverse=True)
+                    st.dataframe(hero_data, width="stretch", hide_index=True)
+
+                    # Top 5 heroes bar chart
+                    top5 = hero_data[:5]
+                    if top5:
+                        fig = go.Figure()
+                        fig.add_trace(go.Bar(name="Avg Elims", x=[h["Hero"] for h in top5], y=[h["Avg Elims"] for h in top5], marker_color="#f99e1a"))
+                        fig.add_trace(go.Scatter(name="KDA", x=[h["Hero"] for h in top5], y=[h["KDA"] for h in top5],
+                                                 mode="lines+markers+text", text=[f"{h['KDA']:.2f}" for h in top5], textposition="top center",
+                                                 textfont=dict(size=11, color="#e94560"),
+                                                 line=dict(color="#e94560", width=2.5), marker=dict(size=8, color="#e94560"),
+                                                 yaxis="y2"))
+                        fig.update_layout(title=f"{hero_player}'s Top 5 Heroes", template="plotly_dark",
+                                          plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350,
+                                          font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80),
+                                          yaxis=dict(title="Avg Elims"), yaxis2=dict(title="KDA", overlaying="y", side="right", showgrid=False))
+                        st.plotly_chart(fig, width="stretch")
+                else:
+                    st.caption("No hero data available for this player.")
+
+            hero_breakdown()
 
             # OW2 AI Summary
             st.markdown("---")
