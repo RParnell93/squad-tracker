@@ -47,6 +47,24 @@ def card_css(accent="#e94560", badge_color="#e94560"):
         .rank-badge {{ display: inline-block; background: {badge_color}; color: white; padding: 2px 6px; border-radius: 12px; font-size: 0.65em; font-weight: 700; margin-left: 4px; white-space: nowrap; }}
         .player-avatar {{ width: 64px; height: 64px; border-radius: 50%; border: 2px solid {accent}; margin-bottom: 8px; }}
         .rank-icon {{ width: 40px; height: 40px; vertical-align: middle; margin-right: 6px; }}
+
+        /* Mobile responsiveness */
+        @media (max-width: 480px) {{
+            .cards-scroll {{ gap: 10px; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }}
+            .cards-scroll .battle-card {{ min-width: 85vw; max-width: 92vw; flex: 0 0 85vw; scroll-snap-align: start; }}
+            .battle-card {{ padding: 14px; }}
+            .player-name {{ font-size: 0.95em; flex-wrap: wrap !important; gap: 4px; }}
+            .player-platform {{ font-size: 0.7em; letter-spacing: 0.5px; white-space: normal; word-break: break-word; }}
+            .big-stat-value {{ font-size: 1.4em; }}
+            .big-stat-label {{ font-size: 0.6em; }}
+            .big-stat {{ padding: 4px 2px; }}
+            .stat-row {{ flex-wrap: wrap; }}
+            .stat-label {{ font-size: 0.75em; }}
+            .stat-value, .stat-highlight {{ font-size: 0.8em; }}
+            .rank-badge {{ font-size: 0.55em; padding: 1px 4px; margin-left: 2px; }}
+            .player-avatar {{ width: 48px; height: 48px; }}
+            .rank-icon {{ width: 32px; height: 32px; }}
+        }}
     </style>"""
 
 # Global CSS - minimal styles for non-card elements (cards use scoped styles in st.html)

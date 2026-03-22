@@ -186,7 +186,7 @@ with fn_tab:
     elif not fn_players:
         st.info("Add Fortnite players in the sidebar.")
     else:
-        if st.button("Refresh Stats"):
+        if st.button("Refresh Stats", use_container_width=True):
             st.session_state.fn_cache = {}
             st.session_state.pop("epic_ids", None)
             st.session_state.pop("epic_cache", None)
@@ -249,14 +249,14 @@ with fn_tab:
                     return None
                 if time_window == "Season" and data.get("season_stats"):
                     return data["season_stats"]
-                if time_window in ("Last 7 Days", "Last 30 Days"):
-                    days = 7 if time_window == "Last 7 Days" else 30
+                if time_window in ("7 Days", "30 Days"):
+                    days = 7 if time_window == "7 Days" else 30
                     aid = epic_ids.get(name)
                     if not aid:
                         return None
                     cache_key = f"epic_{aid}_{days}"
                     return st.session_state.get("epic_cache", {}).get(cache_key)
-                if time_window == "Custom Range":
+                if time_window == "Custom":
                     aid = epic_ids.get(name)
                     if not aid:
                         return None
@@ -269,7 +269,7 @@ with fn_tab:
             # Time window toggle
             time_options = ["Lifetime", "Season"]
             if epic_ids:
-                time_options += ["Last 7 Days", "Last 30 Days", "Custom Range"]
+                time_options += ["7 Days", "30 Days", "Custom"]
             time_window = st.radio("Time Window", time_options, horizontal=True, key="fn_time_window")
 
             # Known Fortnite seasons (date ranges for Epic Stats Proxy lookup)
@@ -284,7 +284,7 @@ with fn_tab:
 
             custom_days = None
             if time_window == "Season" and epic_ids:
-                season_col, _ = st.columns([1, 3])
+                season_col, _ = st.columns([1, 2])
                 with season_col:
                     season_pick = st.selectbox(
                         "Select Season", list(FORTNITE_SEASONS.keys()),
@@ -292,7 +292,7 @@ with fn_tab:
                     )
                 start_date, end_date = FORTNITE_SEASONS[season_pick]
 
-            elif time_window == "Custom Range":
+            elif time_window == "Custom":
                 col_start, col_end = st.columns(2)
                 with col_start:
                     start_date = st.date_input("Start Date", value=date.today() - timedelta(days=14), max_value=date.today(), key="fn_start_date")
@@ -322,8 +322,8 @@ with fn_tab:
                                     st.session_state.epic_cache[cache_key] = None
                                 time.sleep(0.3)
 
-            if time_window in ("Last 7 Days", "Last 30 Days") and epic_ids:
-                days = 7 if time_window == "Last 7 Days" else 30
+            if time_window in ("7 Days", "30 Days") and epic_ids:
+                days = 7 if time_window == "7 Days" else 30
                 missing = [n for n in all_fn if epic_ids.get(n) and f"epic_{epic_ids[n]}_{days}" not in st.session_state.epic_cache]
                 if missing:
                     with st.spinner(f"Loading {time_window.lower()} stats..."):
@@ -354,7 +354,7 @@ with fn_tab:
                                 st.session_state.epic_cache[cache_key] = None
                             time.sleep(0.3)
 
-            elif time_window == "Custom Range" and epic_ids:
+            elif time_window == "Custom" and epic_ids:
                 start_ts = int(datetime.combine(start_date, datetime.min.time()).timestamp())
                 end_ts = int(datetime.combine(end_date, datetime.max.time()).timestamp())
                 range_key = f"{start_ts}_{end_ts}"
@@ -514,7 +514,7 @@ with fn_tab:
                         "Hours Played": {"key": "minutesPlayed", "fmt": lambda v: round(v / 60, 1), "axis": "Hours Played"},
                     }
 
-                    col_metric, _ = st.columns([1, 3])
+                    col_metric, _ = st.columns([1, 2])
                     with col_metric:
                         selected_metric = st.selectbox(
                             "Trend Metric", list(TREND_METRICS.keys()), index=0,
@@ -604,10 +604,11 @@ with fn_tab:
                     y_range = [0, metric_info["max_y"]] if "max_y" in metric_info else None
                     fig.update_layout(
                         template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)",
-                        paper_bgcolor="rgba(0,0,0,0)", height=450,
+                        paper_bgcolor="rgba(0,0,0,0)", height=400,
                         yaxis_title=metric_info["axis"], yaxis_range=y_range,
                         font=dict(color="white"),
-                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10)),
+                        margin=dict(t=60, b=40),
                     )
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -619,7 +620,7 @@ with fn_tab:
             st.caption("Estimated global percentiles based on community benchmarks. Higher = better among all Fortnite players.")
 
             # Single player selector for percentile view
-            pct_col, _ = st.columns([1, 3])
+            pct_col, _ = st.columns([1, 2])
             with pct_col:
                 pct_player = st.selectbox(
                     "Select Player", names,
@@ -656,16 +657,16 @@ with fn_tab:
 
                     bars_html += f"""
                     <div style="display:flex;align-items:center;margin-bottom:8px;">
-                        <div style="width:110px;font-size:0.8em;color:#a8a8b3;flex-shrink:0;">{stat_name}</div>
-                        <div style="flex:1;background:#1a1a2e;border-radius:8px;height:24px;position:relative;">
+                        <div style="width:clamp(70px,25vw,110px);font-size:clamp(0.65em,2vw,0.8em);color:#a8a8b3;flex-shrink:0;">{stat_name}</div>
+                        <div style="flex:1;background:#1a1a2e;border-radius:8px;height:24px;position:relative;min-width:0;">
                             <div style="width:{bar_width}%;height:100%;background:{color};border-radius:8px;"></div>
-                            <div style="position:absolute;left:{bar_width}%;top:50%;transform:translate(-50%,-50%);background:{color};color:white;font-size:0.7em;font-weight:800;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border:2px solid white;">{pct}</div>
+                            <div style="position:absolute;left:clamp(14px,{bar_width}%,calc(100% - 14px));top:50%;transform:translate(-50%,-50%);background:{color};color:white;font-size:0.65em;font-weight:800;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;border:2px solid white;">{pct}</div>
                         </div>
-                        <div style="width:55px;text-align:right;font-size:0.8em;color:white;font-weight:700;flex-shrink:0;padding-left:8px;">{val_str}</div>
+                        <div style="width:clamp(40px,12vw,55px);text-align:right;font-size:clamp(0.65em,2vw,0.8em);color:white;font-weight:700;flex-shrink:0;padding-left:4px;">{val_str}</div>
                     </div>"""
 
                 st.html(f"""
-                <div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);border-radius:12px;padding:16px;border:1px solid #e94560;">
+                <div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);border-radius:12px;padding:clamp(10px,3vw,16px);border:1px solid #e94560;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
                         <span style="color:#a8a8b3;font-size:0.7em;text-transform:uppercase;letter-spacing:1px;">POOR</span>
                         <span style="color:#a8a8b3;font-size:0.7em;text-transform:uppercase;letter-spacing:1px;">AVERAGE</span>
@@ -685,13 +686,13 @@ with fn_tab:
                 kds = [player_mode(n).get("kd", 0) or 0 for n in names]
                 colors = ["#e94560" if v == max(kds) else "#16213e" for v in kds]
                 fig = go.Figure(go.Bar(x=display_names, y=kds, marker_color=colors, text=[f"{v:.2f}" for v in kds], textposition="outside"))
-                fig.update_layout(title="K/D Ratio", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="K/D", height=400, font=dict(color="white"))
+                fig.update_layout(title="K/D Ratio", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="K/D", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
                 st.plotly_chart(fig, use_container_width=True)
             with c2:
                 wrs = [player_mode(n).get("winRate", 0) or 0 for n in names]
                 colors = ["#e94560" if v == max(wrs) else "#16213e" for v in wrs]
                 fig = go.Figure(go.Bar(x=display_names, y=wrs, marker_color=colors, text=[f"{v:.1f}%" for v in wrs], textposition="outside"))
-                fig.update_layout(title="Win Rate", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Win %", height=400, font=dict(color="white"))
+                fig.update_layout(title="Win Rate", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Win %", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
                 st.plotly_chart(fig, use_container_width=True)
 
             c3, c4 = st.columns(2)
@@ -699,13 +700,13 @@ with fn_tab:
                 kpms = [player_mode(n).get("killsPerMatch", 0) or 0 for n in names]
                 colors = ["#e94560" if v == max(kpms) else "#16213e" for v in kpms]
                 fig = go.Figure(go.Bar(x=display_names, y=kpms, marker_color=colors, text=[f"{v:.2f}" for v in kpms], textposition="outside"))
-                fig.update_layout(title="Kills / Match", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Kills", height=400, font=dict(color="white"))
+                fig.update_layout(title="Kills / Match", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Kills", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
                 st.plotly_chart(fig, use_container_width=True)
             with c4:
                 spms = [player_mode(n).get("scorePerMatch", 0) or 0 for n in names]
                 colors = ["#e94560" if v == max(spms) else "#16213e" for v in spms]
                 fig = go.Figure(go.Bar(x=display_names, y=spms, marker_color=colors, text=[f"{v:.0f}" for v in spms], textposition="outside"))
-                fig.update_layout(title="Score / Match", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Score", height=400, font=dict(color="white"))
+                fig.update_layout(title="Score / Match", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Score", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
                 st.plotly_chart(fig, use_container_width=True)
 
             # Radar - normalize each stat to 0-100 across squad
@@ -739,7 +740,7 @@ with fn_tab:
                     theta=categories, fill="toself", name=all_fn[name]["account"]["name"], opacity=0.6,
                 ))
             fig.update_layout(polar=dict(bgcolor="rgba(0,0,0,0)", radialaxis=dict(visible=True, range=[0, 105], color="#a8a8b3", showticklabels=False), angularaxis=dict(color="#a8a8b3")),
-                              template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=500, font=dict(color="white"))
+                              template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=420, font=dict(color="white"))
             st.plotly_chart(fig, use_container_width=True)
 
             # Game Mode Breakdown
@@ -831,7 +832,7 @@ with fn_tab:
                         stats_block = "\n".join(summary_lines)
                         cache_key = f"ai_summary_{hash(stats_block)}"
 
-                        col_btn, _ = st.columns([1, 3])
+                        col_btn, _ = st.columns([1, 2])
                         with col_btn:
                             generate_clicked = st.button("Generate AI Summary", key="ai_summary_btn", type="primary", use_container_width=True)
 
@@ -907,7 +908,7 @@ with ow2_tab:
     if not ow2_players:
         st.info("Add OW2 players in the sidebar (switch to Overwatch 2 first).")
     else:
-        if st.button("Refresh Stats", key="ow2_refresh"):
+        if st.button("Refresh Stats", key="ow2_refresh", use_container_width=True):
             st.session_state.ow2_cache = {}
 
         all_ow2 = {}
@@ -1052,13 +1053,13 @@ with ow2_tab:
                 kdas = [all_ow2[n].get("stats", {}).get("general", {}).get("kda", 0) for n in ow2_names]
                 colors = ["#f99e1a" if v == max(kdas) else "#16213e" for v in kdas]
                 fig = go.Figure(go.Bar(x=ow2_display, y=kdas, marker_color=colors, text=[f"{v:.2f}" for v in kdas], textposition="outside"))
-                fig.update_layout(title="KDA", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=400, font=dict(color="white"))
+                fig.update_layout(title="KDA", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
                 st.plotly_chart(fig, use_container_width=True)
             with c2:
                 wrs = [all_ow2[n].get("stats", {}).get("general", {}).get("winrate", 0) for n in ow2_names]
                 colors = ["#f99e1a" if v == max(wrs) else "#16213e" for v in wrs]
                 fig = go.Figure(go.Bar(x=ow2_display, y=wrs, marker_color=colors, text=[f"{v:.1f}%" for v in wrs], textposition="outside"))
-                fig.update_layout(title="Win Rate", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=400, font=dict(color="white"))
+                fig.update_layout(title="Win Rate", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
                 st.plotly_chart(fig, use_container_width=True)
 
             c3, c4 = st.columns(2)
@@ -1066,13 +1067,13 @@ with ow2_tab:
                 dmgs = [all_ow2[n].get("stats", {}).get("general", {}).get("average", {}).get("damage", 0) for n in ow2_names]
                 colors = ["#f99e1a" if v == max(dmgs) else "#16213e" for v in dmgs]
                 fig = go.Figure(go.Bar(x=ow2_display, y=dmgs, marker_color=colors, text=[f"{v:,.0f}" for v in dmgs], textposition="outside"))
-                fig.update_layout(title="Avg Damage / Game", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=400, font=dict(color="white"))
+                fig.update_layout(title="Avg Damage / Game", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
                 st.plotly_chart(fig, use_container_width=True)
             with c4:
                 heals = [all_ow2[n].get("stats", {}).get("general", {}).get("average", {}).get("healing", 0) for n in ow2_names]
                 colors = ["#f99e1a" if v == max(heals) else "#16213e" for v in heals]
                 fig = go.Figure(go.Bar(x=ow2_display, y=heals, marker_color=colors, text=[f"{v:,.0f}" for v in heals], textposition="outside"))
-                fig.update_layout(title="Avg Healing / Game", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=400, font=dict(color="white"))
+                fig.update_layout(title="Avg Healing / Game", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
                 st.plotly_chart(fig, use_container_width=True)
 
             # Radar - normalize each stat to 0-100 across squad
@@ -1099,7 +1100,7 @@ with ow2_tab:
                     theta=categories, fill="toself", name=all_ow2[n].get("summary", {}).get("username", n), opacity=0.6,
                 ))
             fig.update_layout(polar=dict(bgcolor="rgba(0,0,0,0)", radialaxis=dict(visible=True, range=[0, 105], color="#a8a8b3", showticklabels=False), angularaxis=dict(color="#a8a8b3")),
-                              template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=500, font=dict(color="white"))
+                              template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=420, font=dict(color="white"))
             st.plotly_chart(fig, use_container_width=True)
 
             # Role breakdown table
@@ -1169,7 +1170,7 @@ with ow2_tab:
                     fig.add_trace(go.Bar(name="Avg Elims", x=[h["Hero"] for h in top5], y=[h["Avg Elims"] for h in top5], marker_color="#f99e1a"))
                     fig.add_trace(go.Bar(name="KDA", x=[h["Hero"] for h in top5], y=[h["KDA"] for h in top5], marker_color="#e94560"))
                     fig.update_layout(title=f"{hero_player}'s Top 5 Heroes", barmode="group", template="plotly_dark",
-                                      plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=400, font=dict(color="white"))
+                                      plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
                     st.plotly_chart(fig, use_container_width=True)
             else:
                 st.caption("No hero data available for this player.")

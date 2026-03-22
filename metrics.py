@@ -93,10 +93,10 @@ def score_circle_html(score, label):
         deg = round(score * 3.6)
     color = score_color(score)
     return f'''<div style="display:flex;flex-direction:column;align-items:center;">
-        <div style="width:72px;height:72px;border-radius:50%;background:conic-gradient({color} {deg}deg, #1a1a2e {deg}deg);display:flex;align-items:center;justify-content:center;">
-            <div style="width:58px;height:58px;border-radius:50%;background:#16213e;display:flex;flex-direction:column;align-items:center;justify-content:center;">
-                <span style="color:white;font-size:18px;font-weight:800;line-height:1;">{score_text}</span>
+        <div style="width:clamp(56px,18vw,72px);height:clamp(56px,18vw,72px);border-radius:50%;background:conic-gradient({color} {deg}deg, #1a1a2e {deg}deg);display:flex;align-items:center;justify-content:center;">
+            <div style="width:clamp(44px,14vw,58px);height:clamp(44px,14vw,58px);border-radius:50%;background:#16213e;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+                <span style="color:white;font-size:clamp(14px,4vw,18px);font-weight:800;line-height:1;">{score_text}</span>
             </div>
         </div>
-        <span style="color:#a8a8b3;font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-top:4px;text-align:center;line-height:1.4;">{label}</span>
+        <span style="color:#a8a8b3;font-size:clamp(7px,2vw,9px);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-top:4px;text-align:center;line-height:1.4;">{label}</span>
     </div>'''
