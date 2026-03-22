@@ -109,12 +109,32 @@ CSS = """
     input, select, textarea, button,
     [data-testid="stTextInput"] input,
     [data-testid="stSelectbox"] div,
+    [data-testid="stSelectbox"] span,
+    [data-testid="stSelectbox"] p,
+    [data-testid="stSelectbox"] [data-baseweb="select"] *,
     .stButton button {
         font-family: 'JetBrains Mono', monospace !important;
+    }
+    /* Selectbox - match segmented control sizing */
+    [data-testid="stSelectbox"] [data-baseweb="select"] {
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 0.875rem;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+    [data-testid="stSelectbox"] label {
+        font-family: 'JetBrains Mono', monospace !important;
+    }
+    /* Selectbox dropdown options */
+    [data-baseweb="popover"] li,
+    [data-baseweb="popover"] ul {
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 0.875rem;
     }
     /* Tabs / segmented control */
     [data-testid="stSegmentedControl"] button {
         font-family: 'JetBrains Mono', monospace !important;
+        font-size: 0.875rem;
         font-weight: 600;
         letter-spacing: 0.5px;
     }
