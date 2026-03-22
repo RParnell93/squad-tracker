@@ -196,12 +196,12 @@ with st.sidebar:
     }}
     .player-row:hover {{ background: rgba(255,255,255,0.06); }}
     .player-name {{
-        font-weight: 600; font-size: 0.82em; color: #e6e6e6;
-        overflow: hidden; text-overflow: ellipsis;
+        font-weight: 600; font-size: 0.72em; color: #e6e6e6;
+        white-space: nowrap;
     }}
     .player-tag-row {{
-        display: flex; align-items: center; gap: 4px;
-        white-space: nowrap; overflow: hidden;
+        display: flex; align-items: center; gap: 8px;
+        white-space: nowrap;
     }}
     .plat-tag {{
         padding: 1px 5px; border-radius: 4px;
@@ -837,7 +837,7 @@ if active_game == "Fortnite":
                 ))
 
                 fig.update_layout(
-                    title=f"{display_name} - {rolling_metric} (12 Weeks)",
+                    title=f"{display_name} - {rolling_metric} {'(3-Wk Rolling Avg)' if not PLAYER_METRICS[rolling_metric].get('cumulative') else '(12 Weeks)'}",
                     template="plotly_dark",
                     plot_bgcolor="rgba(0,0,0,0)",
                     paper_bgcolor="rgba(0,0,0,0)",
