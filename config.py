@@ -10,8 +10,6 @@ DEFAULT_FORTNITE_PLAYERS = [
     {"name": "crazy in basye", "type": "xbl", "platform": "Xbox", "epic_name": "Crazy in Basye"},
     {"name": "i7vosunz458", "type": "xbl", "platform": "Xbox", "epic_name": "i7VoSUNZ458"},
     {"name": "callmepot", "type": "epic", "platform": "Epic (PC)", "epic_name": "callmepot"},
-    {"name": "Jbone", "type": "epic", "platform": "Epic (PC)", "epic_name": "Jbone"},
-    {"name": "hailedcanvas141", "type": "xbl", "platform": "Xbox", "epic_name": "DANDEBORD"},
     {"name": "mrfox733", "type": "xbl", "platform": "Xbox", "epic_name": "mrfox733"},
     {"name": "gascan46310", "type": "xbl", "platform": "Xbox", "epic_name": "Gascan46310", "epic_id": "caf1138b62b845108deaa20827a24777"},
 ]
@@ -23,7 +21,6 @@ DEFAULT_OW2_PLAYERS = [
     {"name": "Batzz", "player_id": "d05fb890a93cc9f9bea1%7Cee7e46b8d5cd02a21bd084bd5004fdbe"},
     {"name": "GasCan", "player_id": "d55fbfa9b27fd6fcb8a220a4%7C60d238a9723f0c5c425ab4c56d4579b8"},
     {"name": "GreyBeast", "player_id": "d54ca99391749abefdbd25a7d607a5%7C2b7fa8e1b80a57998ee25a9d17f99925"},
-    {"name": "Jbone", "player_id": "d85ca384b63ccafcbda92e%7C508837fd0c53ce752effa237b8d205a8"},
     {"name": "Paulpummeler"},
     {"name": "i7vosunz458"},
 ]
