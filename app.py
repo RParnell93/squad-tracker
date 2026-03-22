@@ -24,6 +24,7 @@ from metrics import (
     perf_score, score_color, score_circle_html,
 )
 from helpers import get_fortnite_api_key, load_squad, save_squad
+from db import fetch_weekly_trends, get_all_week_ranges, HAS_DUCKDB
 
 st.set_page_config(page_title="Squad Tracker", page_icon="🎮", layout="wide")
 
@@ -191,6 +192,7 @@ with fn_tab:
             st.session_state.pop("epic_ids", None)
             st.session_state.pop("epic_cache", None)
             st.session_state.pop("trend_cache", None)
+            st.session_state.pop("db_trends", None)
 
         all_fn = {}
         for p in fn_players:
@@ -510,13 +512,16 @@ with fn_tab:
                 def render_trend():
                     TREND_METRICS = {
                         "K/D": {"key": "kd", "fmt": lambda v: round(v, 2), "axis": "K/D Ratio", "max_y": 10},
-                        "Win Rate": {"key": "winRate", "fmt": lambda v: round(v, 1), "axis": "Win Rate %"},
-                        "Kills/Match": {"key": "killsPerMatch", "fmt": lambda v: round(v, 2), "axis": "Kills per Match", "max_y": 10},
-                        "Score/Min": {"key": "scorePerMin", "fmt": lambda v: round(v, 1), "axis": "Score per Minute"},
-                        "Score/Match": {"key": "scorePerMatch", "fmt": lambda v: round(v, 1), "axis": "Score per Match"},
-                        "Top 10": {"key": "top10", "fmt": lambda v: int(v), "axis": "Top 10 Finishes"},
-                        "Top 25": {"key": "top25", "fmt": lambda v: int(v), "axis": "Top 25 Finishes"},
-                        "Hours Played": {"key": "minutesPlayed", "fmt": lambda v: round(v / 60, 1), "axis": "Hours Played"},
+                        "Win Rate": {"key": "win_rate", "fmt": lambda v: round(v, 1), "axis": "Win Rate %"},
+                        "Kills/Match": {"key": "kills_per_match", "fmt": lambda v: round(v, 2), "axis": "Kills per Match", "max_y": 10},
+                        "Hours Played": {"key": "minutes_played", "fmt": lambda v: round(v / 60, 1), "axis": "Hours Played"},
+                    }
+
+                    # DB column -> API-style key mapping for trend_cache compatibility
+                    DB_TO_API = {
+                        "kd": "kd", "win_rate": "winRate", "kills_per_match": "killsPerMatch",
+                        "minutes_played": "minutesPlayed", "kills": "kills", "matches": "matches",
+                        "score": "score", "players_outlived": "playersOutlived",
                     }
 
                     col_metric, _ = st.columns([1, 2])
@@ -528,85 +533,162 @@ with fn_tab:
                     metric_info = TREND_METRICS[selected_metric]
 
                     st.markdown(f"## {selected_metric} Trend (Past 12 Weeks)")
-                    st.caption("Weekly values from Epic stats proxy. Each point is one week. Independent of the time window filter above.")
-
-                    def week_label(i):
-                        if i == 0:
-                            return "This Week"
-                        if i == 1:
-                            return "Last Week"
-                        return f"Wk {12 - i}"
-                    # Each "week" is 9 days wide (matches FETCH_7D) to account for API lag
-                    trend_windows = [(week_label(i), i * FETCH_7D, (i + 1) * FETCH_7D) for i in range(12)]
-                    now_ts = int(time.time())
 
                     if "trend_cache" not in st.session_state:
                         st.session_state.trend_cache = {}
 
-                    trend_missing = False
-                    for n in names:
-                        aid = epic_ids.get(n)
-                        if not aid:
-                            continue
-                        for lbl, d_s, d_e in trend_windows:
-                            if f"trend_{aid}_{d_s}_{d_e}" not in st.session_state.trend_cache:
-                                trend_missing = True
-                                break
+                    # Try MotherDuck first for historical weeks
+                    db_data = None
+                    week_ranges = get_all_week_ranges(12)
+                    if HAS_DUCKDB and "db_trends" not in st.session_state:
+                        with st.spinner("Loading trend data from database..."):
+                            db_data = fetch_weekly_trends(list(all_fn.keys()), num_weeks=12)
+                            if db_data is not None:
+                                st.session_state.db_trends = db_data
+                    elif "db_trends" in st.session_state:
+                        db_data = st.session_state.db_trends
 
-                    if trend_missing:
-                        with st.spinner("Loading trend data..."):
-                            for n in names:
-                                aid = epic_ids.get(n)
-                                if not aid:
-                                    continue
-                                for lbl, d_s, d_e in trend_windows:
-                                    ck = f"trend_{aid}_{d_s}_{d_e}"
-                                    if ck in st.session_state.trend_cache:
-                                        continue
-                                    s_ts = now_ts - (d_e * 86400)
-                                    e_ts = now_ts - (d_s * 86400)
-                                    raw = fetch_stats_epic(aid, s_ts, e_ts)
-                                    if raw:
-                                        parsed = parse_raw_stats(raw)
-                                        ms = epic_parsed_to_mode_stats(parsed)
-                                        o = ms.get("all", {}).get("overall", {})
-                                        st.session_state.trend_cache[ck] = {
-                                            "kd": o.get("kd", 0),
-                                            "kills": o.get("kills", 0),
-                                            "matches": o.get("matches", 0),
-                                            "winRate": o.get("winRate", 0),
-                                            "killsPerMatch": o.get("killsPerMatch", 0),
-                                            "scorePerMin": o.get("scorePerMin", 0),
-                                            "scorePerMatch": o.get("scorePerMatch", 0),
-                                            "top10": o.get("top10", 0),
-                                            "top25": o.get("top25", 0),
-                                            "minutesPlayed": o.get("minutesPlayed", 0),
-                                        }
-                                    else:
-                                        st.session_state.trend_cache[ck] = None
-                                    time.sleep(0.3)
+                    if db_data is not None:
+                        # DB path: use stored weekly data, fetch current week live
+                        st.caption("Historical data from database. Current week from live API.")
 
-                    fig = go.Figure()
-                    x_labels = [w[0] for w in reversed(trend_windows)]
-                    tmk = metric_info["key"]
-                    fmt_fn = metric_info["fmt"]
-                    for n in names:
-                        aid = epic_ids.get(n)
-                        if not aid:
-                            continue
-                        y_vals = []
-                        for lbl, d_s, d_e in reversed(trend_windows):
-                            ck = f"trend_{aid}_{d_s}_{d_e}"
-                            cached = st.session_state.trend_cache.get(ck)
-                            if cached and cached.get("matches", 0) > 0 and tmk in cached:
-                                y_vals.append(fmt_fn(cached[tmk]))
+                        # Fetch current week (since last Monday) via API if not cached
+                        today = date.today()
+                        days_since_monday = today.weekday()
+                        current_week_start = today - timedelta(days=days_since_monday)
+                        now_ts = int(time.time())
+                        cw_start_ts = int(datetime.combine(current_week_start, datetime.min.time()).timestamp())
+
+                        for n in names:
+                            aid = epic_ids.get(n)
+                            if not aid:
+                                continue
+                            ck = f"trend_current_{aid}"
+                            if ck not in st.session_state.trend_cache:
+                                raw = fetch_stats_epic(aid, cw_start_ts, now_ts)
+                                if raw:
+                                    parsed = parse_raw_stats(raw)
+                                    ms = epic_parsed_to_mode_stats(parsed)
+                                    o = ms.get("all", {}).get("overall", {})
+                                    st.session_state.trend_cache[ck] = o
+                                else:
+                                    st.session_state.trend_cache[ck] = None
+                                time.sleep(0.3)
+
+                        # Build x labels and y values
+                        x_labels = []
+                        for i, (ws, we) in enumerate(week_ranges):
+                            if i == len(week_ranges) - 1:
+                                x_labels.append("Last Week")
+                            elif i == len(week_ranges) - 2:
+                                x_labels.append("2 Wks Ago")
+                            else:
+                                x_labels.append(f"Wk {i + 1}")
+                        x_labels.append("This Week")
+
+                        tmk = metric_info["key"]
+                        fmt_fn = metric_info["fmt"]
+                        fig = go.Figure()
+                        for n in names:
+                            player_weeks = db_data.get(n, [])
+                            week_lookup = {str(w["week_start"]): w for w in player_weeks}
+                            y_vals = []
+                            for ws, we in week_ranges:
+                                w = week_lookup.get(str(ws))
+                                if w and w.get("matches", 0) > 0 and tmk in w:
+                                    y_vals.append(fmt_fn(w[tmk]))
+                                else:
+                                    y_vals.append(None)
+                            # Current week from API
+                            aid = epic_ids.get(n)
+                            cw = st.session_state.trend_cache.get(f"trend_current_{aid}") if aid else None
+                            api_key = DB_TO_API.get(tmk, tmk)
+                            if cw and cw.get("matches", 0) > 0 and api_key in cw:
+                                y_vals.append(fmt_fn(cw[api_key]))
                             else:
                                 y_vals.append(None)
-                        fig.add_trace(go.Scatter(
-                            x=x_labels, y=y_vals, mode="lines+markers",
-                            name=all_fn[n]["account"]["name"],
-                            line=dict(width=3), marker=dict(size=10),
-                        ))
+                            fig.add_trace(go.Scatter(
+                                x=x_labels, y=y_vals, mode="lines+markers",
+                                name=all_fn[n]["account"]["name"],
+                                line=dict(width=3), marker=dict(size=10),
+                            ))
+                    else:
+                        # Fallback: all API (old behavior)
+                        st.caption("Weekly values from Epic stats proxy. Each point is one week.")
+
+                        def week_label(i):
+                            if i == 0:
+                                return "This Week"
+                            if i == 1:
+                                return "Last Week"
+                            return f"Wk {12 - i}"
+                        trend_windows = [(week_label(i), i * FETCH_7D, (i + 1) * FETCH_7D) for i in range(12)]
+                        now_ts = int(time.time())
+
+                        trend_missing = False
+                        for n in names:
+                            aid = epic_ids.get(n)
+                            if not aid:
+                                continue
+                            for lbl, d_s, d_e in trend_windows:
+                                if f"trend_{aid}_{d_s}_{d_e}" not in st.session_state.trend_cache:
+                                    trend_missing = True
+                                    break
+
+                        if trend_missing:
+                            with st.spinner("Loading trend data..."):
+                                for n in names:
+                                    aid = epic_ids.get(n)
+                                    if not aid:
+                                        continue
+                                    for lbl, d_s, d_e in trend_windows:
+                                        ck = f"trend_{aid}_{d_s}_{d_e}"
+                                        if ck in st.session_state.trend_cache:
+                                            continue
+                                        s_ts = now_ts - (d_e * 86400)
+                                        e_ts = now_ts - (d_s * 86400)
+                                        raw = fetch_stats_epic(aid, s_ts, e_ts)
+                                        if raw:
+                                            parsed = parse_raw_stats(raw)
+                                            ms = epic_parsed_to_mode_stats(parsed)
+                                            o = ms.get("all", {}).get("overall", {})
+                                            st.session_state.trend_cache[ck] = {
+                                                "kd": o.get("kd", 0),
+                                                "kills": o.get("kills", 0),
+                                                "matches": o.get("matches", 0),
+                                                "winRate": o.get("winRate", 0),
+                                                "killsPerMatch": o.get("killsPerMatch", 0),
+                                                "scorePerMin": o.get("scorePerMin", 0),
+                                                "scorePerMatch": o.get("scorePerMatch", 0),
+                                                "minutesPlayed": o.get("minutesPlayed", 0),
+                                            }
+                                        else:
+                                            st.session_state.trend_cache[ck] = None
+                                        time.sleep(0.3)
+
+                        tmk_api = {"kd": "kd", "win_rate": "winRate", "kills_per_match": "killsPerMatch",
+                                   "minutes_played": "minutesPlayed"}.get(metric_info["key"], metric_info["key"])
+                        fmt_fn = metric_info["fmt"]
+                        fig = go.Figure()
+                        x_labels = [w[0] for w in reversed(trend_windows)]
+                        for n in names:
+                            aid = epic_ids.get(n)
+                            if not aid:
+                                continue
+                            y_vals = []
+                            for lbl, d_s, d_e in reversed(trend_windows):
+                                ck = f"trend_{aid}_{d_s}_{d_e}"
+                                cached = st.session_state.trend_cache.get(ck)
+                                if cached and cached.get("matches", 0) > 0 and tmk_api in cached:
+                                    y_vals.append(fmt_fn(cached[tmk_api]))
+                                else:
+                                    y_vals.append(None)
+                            fig.add_trace(go.Scatter(
+                                x=x_labels, y=y_vals, mode="lines+markers",
+                                name=all_fn[n]["account"]["name"],
+                                line=dict(width=3), marker=dict(size=10),
+                            ))
+
                     y_range = [0, metric_info["max_y"]] if "max_y" in metric_info else None
                     fig.update_layout(
                         template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)",
@@ -837,7 +919,6 @@ with fn_tab:
                             f"Kills/Match {o7.get('killsPerMatch', 0):.2f}, "
                             f"Score/Match {o7.get('scorePerMatch', 0):.0f}, "
                             f"Players Outlived {o7.get('playersOutlived', 0)}, "
-                            f"Top 10s {o7.get('top10', 0)}, "
                             f"Hours {round((o7.get('minutesPlayed', 0) or 0) / 60, 1)}"
                         )
                         # Add Dub Score context

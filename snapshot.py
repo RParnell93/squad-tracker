@@ -67,6 +67,11 @@ def resolve_account_ids():
 
     ids = {}
     for p in DEFAULT_FORTNITE_PLAYERS:
+        # Use hardcoded epic_id if available (for players with no Epic display name)
+        if p.get("epic_id"):
+            ids[p["name"]] = p["epic_id"]
+            print(f"  {p['name']} -> {p['epic_id']} (from config)")
+            continue
         display = p.get("epic_name", p["name"])
         result = lookup_account_by_name(display, token)
         if result:
