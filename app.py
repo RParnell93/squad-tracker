@@ -844,10 +844,10 @@ with fn_tab:
                         lw = trend_data.get(f"trend_{aid}_{FETCH_7D}_{FETCH_7D * 2}")
                         if lw and lw.get("matches", 0) > 0:
                             wow_lines.append(
-                                f"{display} WoW: K/D {_delta(o7.get('kd',0), lw.get('kd',0))}, "
-                                f"Win Rate {_delta(o7.get('winRate',0), lw.get('winRate',0), '.1f')}%, "
-                                f"Kills/Match {_delta(o7.get('killsPerMatch',0), lw.get('killsPerMatch',0))}, "
-                                f"Matches {o7.get('matches',0)} vs {lw.get('matches',0)} last week"
+                                f"{display} week-over-week changes: K/D {_delta(o7.get('kd',0), lw.get('kd',0))} WoW, "
+                                f"Win Rate {_delta(o7.get('winRate',0), lw.get('winRate',0), '.1f')}% WoW, "
+                                f"Kills/Match {_delta(o7.get('killsPerMatch',0), lw.get('killsPerMatch',0))} WoW, "
+                                f"Matches this week: {o7.get('matches',0)} vs last week: {lw.get('matches',0)}"
                             )
 
                     if summary_lines:
@@ -891,7 +891,7 @@ WEEK-OVER-WEEK CHANGES:
 
 Write a weekly summary (200-250 words) covering:
 1. MVP of the Week - best overall performance with specific numbers from this week
-2. Week-over-Week trends - who improved, who slipped, who went MIA (use the WoW deltas)
+2. Week-over-Week trends - who improved, who slipped, who went MIA. When citing a delta (e.g. "K/D down 0.88"), always say "week over week" so the reader knows it's a comparison.
 3. Dub Score check - call out low Dub Scores and challenge those players to improve
 4. Superlatives - most kills, best K/D, highest win rate, most improved, grindiest (most matches/hours). Double-check your claims against the numbers - don't say someone leads a stat if they don't.
 5. Roasts and shoutouts - playful and specific. Low K/D? More deaths than kills? Barely played? Call it out.
