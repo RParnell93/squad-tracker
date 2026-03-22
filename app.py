@@ -232,6 +232,10 @@ with fn_tab:
         if all_fn:
             epic_ids = st.session_state.get("epic_ids", {})
 
+            # Actual fetch window for "7 Days" - padded to 9 to account for API reporting lag
+            FETCH_7D = 9
+            FETCH_30D = 30
+
             # Helper to get stats for the selected time window
             def get_stats(data, name, time_window):
                 if time_window == "Season" and epic_ids.get(name):
@@ -250,11 +254,11 @@ with fn_tab:
                 if time_window == "Season" and data.get("season_stats"):
                     return data["season_stats"]
                 if time_window in ("7 Days", "30 Days"):
-                    days = 7 if time_window == "7 Days" else 30
+                    fetch_days = FETCH_7D if time_window == "7 Days" else FETCH_30D
                     aid = epic_ids.get(name)
                     if not aid:
                         return None
-                    cache_key = f"epic_{aid}_{days}"
+                    cache_key = f"epic_{aid}_{fetch_days}"
                     return st.session_state.get("epic_cache", {}).get(cache_key)
                 if time_window == "Custom":
                     aid = epic_ids.get(name)
@@ -306,12 +310,13 @@ with fn_tab:
             if "epic_cache" not in st.session_state:
                 st.session_state.epic_cache = {}
 
-            # Always fetch 7d and 30d stats for performance score circles
+            # Always fetch 7d (actually 9d) and 30d stats for performance score circles
             if epic_ids:
-                for score_days in (7, 30):
+                for score_days in (FETCH_7D, FETCH_30D):
+                    label_days = 7 if score_days == FETCH_7D else 30
                     missing = [n for n in all_fn if epic_ids.get(n) and f"epic_{epic_ids[n]}_{score_days}" not in st.session_state.epic_cache]
                     if missing:
-                        with st.spinner(f"Loading {score_days}-day stats..."):
+                        with st.spinner(f"Loading {label_days}-day stats..."):
                             for name in missing:
                                 aid = epic_ids[name]
                                 parsed = stats_for_window(aid, days=score_days)
@@ -323,14 +328,14 @@ with fn_tab:
                                 time.sleep(0.3)
 
             if time_window in ("7 Days", "30 Days") and epic_ids:
-                days = 7 if time_window == "7 Days" else 30
-                missing = [n for n in all_fn if epic_ids.get(n) and f"epic_{epic_ids[n]}_{days}" not in st.session_state.epic_cache]
+                fetch_days = FETCH_7D if time_window == "7 Days" else FETCH_30D
+                missing = [n for n in all_fn if epic_ids.get(n) and f"epic_{epic_ids[n]}_{fetch_days}" not in st.session_state.epic_cache]
                 if missing:
                     with st.spinner(f"Loading {time_window.lower()} stats..."):
                         for name in missing:
                             aid = epic_ids[name]
-                            parsed = stats_for_window(aid, days=days)
-                            cache_key = f"epic_{aid}_{days}"
+                            parsed = stats_for_window(aid, days=fetch_days)
+                            cache_key = f"epic_{aid}_{fetch_days}"
                             if parsed:
                                 st.session_state.epic_cache[cache_key] = epic_parsed_to_mode_stats(parsed)
                             else:
@@ -388,8 +393,8 @@ with fn_tab:
             for name in all_fn:
                 aid = epic_ids.get(name)
                 if aid:
-                    s7 = st.session_state.get("epic_cache", {}).get(f"epic_{aid}_7")
-                    s30 = st.session_state.get("epic_cache", {}).get(f"epic_{aid}_30")
+                    s7 = st.session_state.get("epic_cache", {}).get(f"epic_{aid}_{FETCH_7D}")
+                    s30 = st.session_state.get("epic_cache", {}).get(f"epic_{aid}_{FETCH_30D}")
                     perf_scores[name] = (perf_score(s7), perf_score(s30))
                 else:
                     perf_scores[name] = (None, None)
@@ -531,7 +536,8 @@ with fn_tab:
                         if i == 1:
                             return "Last Week"
                         return f"Wk {12 - i}"
-                    trend_windows = [(week_label(i), i * 7, (i + 1) * 7) for i in range(12)]
+                    # Each "week" is 9 days wide (matches FETCH_7D) to account for API lag
+                    trend_windows = [(week_label(i), i * FETCH_7D, (i + 1) * FETCH_7D) for i in range(12)]
                     now_ts = int(time.time())
 
                     if "trend_cache" not in st.session_state:
@@ -795,24 +801,21 @@ with fn_tab:
                 else:
                     st.caption("Powered by Claude. Based on the last 7 days of stats.")
 
-                    # Build stats context - prefer 7-day cache, fall back to lifetime
+                    # Build this-week and last-week stats for WoW comparison
                     summary_lines = []
-                    _using_lifetime = False
+                    wow_lines = []
+                    trend_data = st.session_state.get("trend_cache", {})
                     for name in names:
                         display = all_fn[name]["account"]["name"]
-                        o7 = None
                         aid = epic_ids.get(name)
-                        if aid:
-                            s7_data = st.session_state.get("epic_cache", {}).get(f"epic_{aid}_7")
-                            if s7_data:
-                                o7 = s7_data.get("all", {}).get("overall", {})
+                        if not aid:
+                            continue
+                        s7_data = st.session_state.get("epic_cache", {}).get(f"epic_{aid}_{FETCH_7D}")
+                        if not s7_data:
+                            continue
+                        o7 = s7_data.get("all", {}).get("overall", {})
                         if not o7 or not o7.get("matches", 0):
-                            # Fall back to lifetime stats
-                            o7 = all_fn[name].get("stats", {}).get("all", {}).get("overall")
-                            if o7 and o7.get("matches", 0):
-                                _using_lifetime = True
-                            else:
-                                continue
+                            continue
                         summary_lines.append(
                             f"{display}: {o7.get('matches', 0)} matches, "
                             f"{o7.get('kills', 0)} kills, "
@@ -824,13 +827,24 @@ with fn_tab:
                             f"Top 10s {o7.get('top10', 0)}, "
                             f"Hours {round((o7.get('minutesPlayed', 0) or 0) / 60, 1)}"
                         )
-
-                    if _using_lifetime:
-                        st.caption("7-day stats unavailable for some players - using lifetime stats as fallback.")
+                        # Pull last week from trend cache for WoW
+                        lw = trend_data.get(f"trend_{aid}_{FETCH_7D}_{FETCH_7D * 2}")
+                        if lw and lw.get("matches", 0) > 0:
+                            def _delta(curr, prev, fmt=".2f"):
+                                diff = curr - prev
+                                sign = "+" if diff >= 0 else ""
+                                return f"{sign}{diff:{fmt}}"
+                            wow_lines.append(
+                                f"{display} WoW: K/D {_delta(o7.get('kd',0), lw.get('kd',0))}, "
+                                f"Win Rate {_delta(o7.get('winRate',0), lw.get('winRate',0), '.1f')}%, "
+                                f"Kills/Match {_delta(o7.get('killsPerMatch',0), lw.get('killsPerMatch',0))}, "
+                                f"Matches {o7.get('matches',0)} vs {lw.get('matches',0)} last week"
+                            )
 
                     if summary_lines:
                         stats_block = "\n".join(summary_lines)
-                        cache_key = f"ai_summary_{hash(stats_block)}"
+                        wow_block = "\n".join(wow_lines) if wow_lines else "No last-week data available for comparison."
+                        cache_key = f"ai_summary_{hash(stats_block + wow_block)}"
 
                         col_btn, _ = st.columns([1, 2])
                         with col_btn:
@@ -842,21 +856,30 @@ with fn_tab:
                                     client = anthropic.Anthropic(api_key=_anthropic_key)
                                     resp = client.messages.create(
                                         model="claude-haiku-4-5-20251001",
-                                        max_tokens=600,
+                                        max_tokens=800,
                                         messages=[{
                                             "role": "user",
-                                            "content": f"""You are a Fortnite squad analyst writing a fun, concise weekly recap for a friend group.
-Here are the last 7 days of stats for each squad member:
+                                            "content": f"""You are a Fortnite squad analyst writing a fun weekly recap for a friend group.
 
+THIS WEEK'S STATS (last 7 days):
 {stats_block}
 
-Write a 3-5 paragraph weekly summary that:
-- Calls out the MVP of the week and why
-- Highlights any standout performances or funny stats (like someone dying a lot or barely playing)
-- Gives a playful roast or shoutout to specific players
-- Ends with a bold prediction or challenge for next week
-- Keep it casual and fun, like a group chat message. Use their display names.
-- No emojis. Keep it under 200 words."""
+WEEK-OVER-WEEK CHANGES:
+{wow_block}
+
+Write a weekly summary (200-250 words) that:
+1. MVP of the Week - who had the best overall performance and why (use specific numbers)
+2. Week-over-Week trends - call out who improved, who slipped, who went MIA. Use the WoW deltas.
+3. Superlatives - most kills, best K/D, highest win rate, most improved, biggest dropoff, grindiest (most matches/hours)
+4. Roasts and shoutouts - be playful and specific. If someone barely played, call it out. If someone died more than they killed, roast them.
+5. Challenge for next week - a specific, fun challenge for the squad or individual players
+
+Rules:
+- ONLY reference the 7-day stats provided. Do NOT mention lifetime, career, or all-time stats.
+- Use their display names exactly as shown.
+- Keep it casual, like a group chat message.
+- No emojis.
+- If a player has 0 matches this week, note they were absent."""
                                         }]
                                     )
                                     st.session_state[cache_key] = resp.content[0].text
@@ -866,7 +889,7 @@ Write a 3-5 paragraph weekly summary that:
                         if cache_key in st.session_state:
                             st.markdown(st.session_state[cache_key])
                     else:
-                        st.caption("No player data available for AI summary.")
+                        st.caption("No 7-day data available. Players need recent matches for the AI summary.")
 
             # Data Definitions
             st.markdown("---")
