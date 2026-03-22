@@ -398,7 +398,7 @@ with fn_tab:
 
             # Battle Cards - Supreme Leader first
             st.markdown("## Battle Cards")
-            fn_card_order = list(all_fn.keys())
+            fn_card_order = sorted(all_fn.keys(), key=lambda n: perf_scores.get(n, (0, 0))[0] or 0, reverse=True)
             if fn_supreme and fn_supreme in fn_card_order:
                 fn_card_order.remove(fn_supreme)
                 fn_card_order.insert(0, fn_supreme)
