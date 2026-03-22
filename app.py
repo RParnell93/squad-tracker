@@ -975,113 +975,113 @@ if active_game == "Fortnite":
             elif not _anthropic_key:
                 st.caption("Add ANTHROPIC_API_KEY to secrets to enable AI summaries.")
             else:
-                    st.caption("Powered by Claude. Based on the last 7 days of stats.")
+                st.caption("Powered by Claude. Based on the last 7 days of stats.")
 
-                    # Player context for the AI summary
-                    PLAYER_NOTES = {
-                        "Gascan46310": "she/her pronouns",
-                        "i7VoSUNZ458": "he/him. Always tease or roast this player. Find something to rib him about no matter how well he played - low win rate, dying too much, whatever you can find. Make it funny. Also always subtly hint that he needs to put in more time and grind harder.",
-                    }
+                # Player context for the AI summary
+                PLAYER_NOTES = {
+                    "Gascan46310": "she/her pronouns",
+                    "i7VoSUNZ458": "he/him. Always tease or roast this player. Find something to rib him about no matter how well he played - low win rate, dying too much, whatever you can find. Make it funny. Also always subtly hint that he needs to put in more time and grind harder.",
+                }
 
-                    # Build this-week and last-week stats for WoW comparison
-                    summary_lines = []
-                    wow_lines = []
-                    dub_lines = []
-                    # Load db_trends for WoW comparison if not already loaded
-                    if "db_trends" not in st.session_state:
-                        _dt = fetch_weekly_trends(list(all_fn.keys()), num_weeks=12)
-                        st.session_state.db_trends = _dt
-                    db_trends_data = st.session_state.get("db_trends") or {}
+                # Build this-week and last-week stats for WoW comparison
+                summary_lines = []
+                wow_lines = []
+                dub_lines = []
+                # Load db_trends for WoW comparison if not already loaded
+                if "db_trends" not in st.session_state:
+                    _dt = fetch_weekly_trends(list(all_fn.keys()), num_weeks=12)
+                    st.session_state.db_trends = _dt
+                db_trends_data = st.session_state.get("db_trends") or {}
 
-                    def _delta(curr, prev, fmt=".2f"):
-                        diff = curr - prev
-                        sign = "+" if diff >= 0 else ""
-                        return f"{sign}{diff:{fmt}}"
+                def _delta(curr, prev, fmt=".2f"):
+                    diff = curr - prev
+                    sign = "+" if diff >= 0 else ""
+                    return f"{sign}{diff:{fmt}}"
 
+                for name in names:
+                    display = all_fn[name]["account"]["name"]
+                    s7_data = db_7d.get(name)
+                    if not s7_data:
+                        continue
+                    o7 = s7_data.get("all", {}).get("overall", {})
+                    if not o7 or not o7.get("matches", 0):
+                        continue
+                    summary_lines.append(
+                        f"{display}: {o7.get('matches', 0)} matches, "
+                        f"{o7.get('kills', 0)} kills, "
+                        f"K/D {o7.get('kd', 0):.2f}, "
+                        f"Win Rate {o7.get('winRate', 0):.1f}%, "
+                        f"Kills/Match {o7.get('killsPerMatch', 0):.2f}, "
+                        f"Score/Match {o7.get('scorePerMatch', 0):.0f}, "
+                        f"Players Outlived {o7.get('playersOutlived', 0)}, "
+                        f"Hours {round((o7.get('minutesPlayed', 0) or 0) / 60, 1)}"
+                    )
+                    # Add Dub Score context
+                    s7_score, s30_score = perf_scores.get(name, (None, None))
+                    dub_lines.append(f"{display}: 7-Day Dub Score {s7_score or 'N/A'}, 30-Day Dub Score {s30_score or 'N/A'}")
+                    # Pull last completed week from DB for WoW comparison
+                    player_weeks = db_trends_data.get(name, [])
+                    lw = player_weeks[-1] if player_weeks else None
+                    if lw and lw.get("matches", 0) > 0:
+                        wow_lines.append(
+                            f"{display} week-over-week changes: K/D {_delta(o7.get('kd',0), lw.get('kd',0))} WoW, "
+                            f"Win Rate {_delta(o7.get('winRate',0), lw.get('win_rate',0), '.1f')}% WoW, "
+                            f"Kills/Match {_delta(o7.get('killsPerMatch',0), lw.get('kills_per_match',0))} WoW, "
+                            f"Matches this week: {o7.get('matches',0)} vs last week: {lw.get('matches',0)}"
+                        )
+
+                if summary_lines:
+                    stats_block = "\n".join(summary_lines)
+                    dub_block = "\n".join(dub_lines)
+                    wow_block = "\n".join(wow_lines) if wow_lines else "No last-week data available for comparison."
+                    # Build player notes context
+                    player_notes = []
                     for name in names:
                         display = all_fn[name]["account"]["name"]
-                        s7_data = db_7d.get(name)
-                        if not s7_data:
-                            continue
-                        o7 = s7_data.get("all", {}).get("overall", {})
-                        if not o7 or not o7.get("matches", 0):
-                            continue
-                        summary_lines.append(
-                            f"{display}: {o7.get('matches', 0)} matches, "
-                            f"{o7.get('kills', 0)} kills, "
-                            f"K/D {o7.get('kd', 0):.2f}, "
-                            f"Win Rate {o7.get('winRate', 0):.1f}%, "
-                            f"Kills/Match {o7.get('killsPerMatch', 0):.2f}, "
-                            f"Score/Match {o7.get('scorePerMatch', 0):.0f}, "
-                            f"Players Outlived {o7.get('playersOutlived', 0)}, "
-                            f"Hours {round((o7.get('minutesPlayed', 0) or 0) / 60, 1)}"
-                        )
-                        # Add Dub Score context
-                        s7_score, s30_score = perf_scores.get(name, (None, None))
-                        dub_lines.append(f"{display}: 7-Day Dub Score {s7_score or 'N/A'}, 30-Day Dub Score {s30_score or 'N/A'}")
-                        # Pull last completed week from DB for WoW comparison
-                        player_weeks = db_trends_data.get(name, [])
-                        lw = player_weeks[-1] if player_weeks else None
-                        if lw and lw.get("matches", 0) > 0:
-                            wow_lines.append(
-                                f"{display} week-over-week changes: K/D {_delta(o7.get('kd',0), lw.get('kd',0))} WoW, "
-                                f"Win Rate {_delta(o7.get('winRate',0), lw.get('win_rate',0), '.1f')}% WoW, "
-                                f"Kills/Match {_delta(o7.get('killsPerMatch',0), lw.get('kills_per_match',0))} WoW, "
-                                f"Matches this week: {o7.get('matches',0)} vs last week: {lw.get('matches',0)}"
-                            )
+                        if display in PLAYER_NOTES:
+                            player_notes.append(f"- {display}: {PLAYER_NOTES[display]}")
+                    notes_block = "\n".join(player_notes) if player_notes else ""
+                    # Rotating styles and structures for variety
+                    SUMMARY_VOICES = [
+                        "Write like a late-night sports talk radio host who's way too invested in Fortnite stats.",
+                        "Write like a sarcastic group chat friend who's been watching everyone's stats all week.",
+                        "Write like a disappointed but loving coach giving a halftime speech.",
+                        "Write like an overhyped esports commentator doing a post-match breakdown.",
+                        "Write like a sports columnist filing a deadline piece for the local paper.",
+                        "Write like someone giving a best man speech but about Fortnite stats instead of a wedding.",
+                        "Write like a detective filing a case report on this week's Fortnite crimes.",
+                        "Write like a nature documentary narrator observing the squad in their natural habitat.",
+                        "Write like a weatherman but the forecast is Fortnite performance.",
+                        "Write like a brutally honest fantasy football analyst evaluating roster moves.",
+                        "Write like a drill sergeant reviewing troop performance after training exercises.",
+                        "Write like a Yelp reviewer rating each player's week like a restaurant visit.",
+                    ]
+                    SUMMARY_STRUCTURES = [
+                        "1. Crown the MVP with receipts (specific stats)\n2. WoW trends - rises, falls, ghosts\n3. Dub Score audit - who's coasting?\n4. Superlatives - most kills, best K/D, grindiest, most improved\n5. Roasts and shoutouts\n6. Next week's challenge",
+                        "1. Power rankings - rank every active player this week, 1 sentence each\n2. Biggest glow-up and biggest fall-off (WoW comparison)\n3. Dub Score spotlight - highest and lowest\n4. The Grind Report - who put in hours, who ghosted\n5. Personalized callouts for each player\n6. Throw down a squad challenge",
+                        "1. Headlines - 3 one-liner headlines summarizing the week\n2. Player of the Week breakdown with stats\n3. WoW movers - who trended up, who fell off\n4. Stat superlatives with commentary\n5. The Roast Corner - pick 2-3 players to flame\n6. Dub Score predictions for next week",
+                        "1. Opening hot take that's slightly controversial\n2. MVP case - make the argument with numbers\n3. The Good, The Bad, The Missing (WoW context)\n4. Dub Score report card\n5. Award show - hand out 3-4 funny custom awards\n6. Closing challenge or dare",
+                    ]
 
-                    if summary_lines:
-                        stats_block = "\n".join(summary_lines)
-                        dub_block = "\n".join(dub_lines)
-                        wow_block = "\n".join(wow_lines) if wow_lines else "No last-week data available for comparison."
-                        # Build player notes context
-                        player_notes = []
-                        for name in names:
-                            display = all_fn[name]["account"]["name"]
-                            if display in PLAYER_NOTES:
-                                player_notes.append(f"- {display}: {PLAYER_NOTES[display]}")
-                        notes_block = "\n".join(player_notes) if player_notes else ""
-                        # Rotating styles and structures for variety
-                        SUMMARY_VOICES = [
-                            "Write like a late-night sports talk radio host who's way too invested in Fortnite stats.",
-                            "Write like a sarcastic group chat friend who's been watching everyone's stats all week.",
-                            "Write like a disappointed but loving coach giving a halftime speech.",
-                            "Write like an overhyped esports commentator doing a post-match breakdown.",
-                            "Write like a sports columnist filing a deadline piece for the local paper.",
-                            "Write like someone giving a best man speech but about Fortnite stats instead of a wedding.",
-                            "Write like a detective filing a case report on this week's Fortnite crimes.",
-                            "Write like a nature documentary narrator observing the squad in their natural habitat.",
-                            "Write like a weatherman but the forecast is Fortnite performance.",
-                            "Write like a brutally honest fantasy football analyst evaluating roster moves.",
-                            "Write like a drill sergeant reviewing troop performance after training exercises.",
-                            "Write like a Yelp reviewer rating each player's week like a restaurant visit.",
-                        ]
-                        SUMMARY_STRUCTURES = [
-                            "1. Crown the MVP with receipts (specific stats)\n2. WoW trends - rises, falls, ghosts\n3. Dub Score audit - who's coasting?\n4. Superlatives - most kills, best K/D, grindiest, most improved\n5. Roasts and shoutouts\n6. Next week's challenge",
-                            "1. Power rankings - rank every active player this week, 1 sentence each\n2. Biggest glow-up and biggest fall-off (WoW comparison)\n3. Dub Score spotlight - highest and lowest\n4. The Grind Report - who put in hours, who ghosted\n5. Personalized callouts for each player\n6. Throw down a squad challenge",
-                            "1. Headlines - 3 one-liner headlines summarizing the week\n2. Player of the Week breakdown with stats\n3. WoW movers - who trended up, who fell off\n4. Stat superlatives with commentary\n5. The Roast Corner - pick 2-3 players to flame\n6. Dub Score predictions for next week",
-                            "1. Opening hot take that's slightly controversial\n2. MVP case - make the argument with numbers\n3. The Good, The Bad, The Missing (WoW context)\n4. Dub Score report card\n5. Award show - hand out 3-4 funny custom awards\n6. Closing challenge or dare",
-                        ]
+                    voice = random.choice(SUMMARY_VOICES)
+                    structure = random.choice(SUMMARY_STRUCTURES)
 
-                        voice = random.choice(SUMMARY_VOICES)
-                        structure = random.choice(SUMMARY_STRUCTURES)
+                    col_btn, _ = st.columns([1, 2])
+                    with col_btn:
+                        generate_clicked = st.button("Generate AI Summary", key="ai_summary_btn", type="primary", width="stretch")
 
-                        col_btn, _ = st.columns([1, 2])
-                        with col_btn:
-                            generate_clicked = st.button("Generate AI Summary", key="ai_summary_btn", type="primary", width="stretch")
-
-                        if generate_clicked:
-                            # Always generate fresh on click (no caching)
-                            st.session_state["ai_summary_result"] = None
-                            with st.spinner("Generating weekly summary..."):
-                                try:
-                                    client = anthropic.Anthropic(api_key=_anthropic_key)
-                                    resp = client.messages.create(
-                                        model="claude-haiku-4-5-20251001",
-                                        max_tokens=800,
-                                        messages=[{
-                                            "role": "user",
-                                            "content": f"""You are a Fortnite squad analyst writing a fun weekly recap for a friend group.
+                    if generate_clicked:
+                        # Always generate fresh on click (no caching)
+                        st.session_state["ai_summary_result"] = None
+                        with st.spinner("Generating weekly summary..."):
+                            try:
+                                client = anthropic.Anthropic(api_key=_anthropic_key)
+                                resp = client.messages.create(
+                                    model="claude-haiku-4-5-20251001",
+                                    max_tokens=800,
+                                    messages=[{
+                                        "role": "user",
+                                        "content": f"""You are a Fortnite squad analyst writing a fun weekly recap for a friend group.
 
 VOICE/STYLE FOR THIS WEEK: {voice}
 
@@ -1114,16 +1114,16 @@ Writing rules:
 - Don't start paragraphs with "But let's talk about" or "Here's where it gets spicy".
 - Be direct. Cut filler. If you can say it shorter, do.
 - NEVER suggest anyone should play less or take a break. More time playing is always good. Encourage grinding."""
-                                        }]
-                                    )
-                                    st.session_state["ai_summary_result"] = resp.content[0].text
-                                except Exception as e:
-                                    st.session_state["ai_summary_result"] = f"Could not generate summary: {e}"
+                                    }]
+                                )
+                                st.session_state["ai_summary_result"] = resp.content[0].text
+                            except Exception as e:
+                                st.session_state["ai_summary_result"] = f"Could not generate summary: {e}"
 
-                        if st.session_state.get("ai_summary_result"):
-                            st.markdown(f'<div class="prose-section">\n\n{st.session_state["ai_summary_result"]}\n\n</div>', unsafe_allow_html=True)
-                    else:
-                        st.caption("No 7-day data available. Players need recent matches for the AI summary.")
+                    if st.session_state.get("ai_summary_result"):
+                        st.markdown(f'<div class="prose-section">\n\n{st.session_state["ai_summary_result"]}\n\n</div>', unsafe_allow_html=True)
+                else:
+                    st.caption("No 7-day data available. Players need recent matches for the AI summary.")
 
             # Data Definitions
             st.markdown("---")
