@@ -659,7 +659,7 @@ if active_game == "Fortnite":
                     {'<div class="stat-row"><span class="stat-label">Last Active</span><span class="stat-value">' + last_on + '</span></div>' if last_on else ''}
                     <div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);">
                         <div style="font-size:0.6em;color:#a8a8b3;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Percentiles</div>
-                        {"".join(_mini_pct_bar(sn, sv, matches) for sn, sv in [("K/D", kd), ("Win%", wr), ("K/M", kpm), ("Out/M", opm)])}
+                        {"".join(_mini_pct_bar(sn, sv, matches) for sn, sv in [("Win%", wr), ("K/D", kd), ("K/M", kpm), ("Out/M", opm)])}
                     </div>
                 </div>""")
 
@@ -1320,7 +1320,7 @@ elif active_game == "Overwatch 2":
                     <div class="stat-row"><span class="stat-label">Hours Played</span><span class="stat-value">{hours:,.1f}</span></div>
                     <div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.08);">
                         <div style="font-size:0.6em;color:#a8a8b3;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Percentiles</div>
-                        {"".join(_mini_pct_bar_ow2(sn, sv) for sn, sv in [("KDA", kda), ("Win%", winrate), ("Elims", avg.get('eliminations', 0) or 0), ("Dmg", avg.get('damage', 0) or 0)])}
+                        {"".join(_mini_pct_bar_ow2(sn, sv) for sn, sv in [("Win%", winrate), ("KDA", kda), ("Elims", avg.get('eliminations', 0) or 0), ("Dmg", avg.get('damage', 0) or 0)])}
                     </div>
                 </div>""")
 
