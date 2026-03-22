@@ -340,6 +340,20 @@ with fn_tab:
                 else:
                     perf_scores[name] = (None, None)
 
+            # Supreme Leader - best composite score (K/D + Win Rate + Kills/Match percentiles)
+            fn_composite = {}
+            for n in names:
+                o = player_mode(n)
+                if o and o.get("matches", 0):
+                    fn_composite[n] = (
+                        0.4 * _interp(o.get("kd", 0) or 0, SCORE_CURVES["kd"])
+                        + 0.3 * _interp(o.get("winRate", 0) or 0, SCORE_CURVES["winRate"])
+                        + 0.3 * _interp(o.get("killsPerMatch", 0) or 0, SCORE_CURVES["killsPerMatch"])
+                    )
+                else:
+                    fn_composite[n] = 0
+            fn_supreme = max(fn_composite, key=fn_composite.get) if fn_composite and max(fn_composite.values()) > 0 else None
+
             # Battle Cards
             st.markdown("## Battle Cards")
             fn_cards_html = []
@@ -376,9 +390,11 @@ with fn_tab:
                 circle_7d = score_circle_html(s7, "7-Day<br>Dub Score")
                 circle_30d = score_circle_html(s30, "30-Day<br>Dub Score")
 
+                supreme_badge = ' <span style="display:inline-block;background:linear-gradient(90deg,#ffd700,#ffaa00);color:#1a1a2e;padding:2px 8px;border-radius:12px;font-size:0.55em;font-weight:800;margin-left:6px;letter-spacing:0.5px;vertical-align:middle;">SUPREME LEADER</span>' if name == fn_supreme and len(all_fn) > 1 else ""
+
                 fn_cards_html.append(f"""
-                <div class="battle-card">
-                    <div class="player-name">{data['account']['name']}</div>
+                <div class="battle-card" style="{'border-color:#ffd700;box-shadow:0 0 12px rgba(255,215,0,0.3);' if name == fn_supreme and len(all_fn) > 1 else ''}">
+                    <div class="player-name">{data['account']['name']}{supreme_badge}</div>
                     <div class="player-platform">{platform} | BP Lv {bp.get('level', '?')} | {window_label}</div>
                     <div style="display: flex; justify-content: center; gap: 16px; margin-bottom: 12px;">
                         {circle_7d}{circle_30d}
@@ -779,6 +795,15 @@ with ow2_tab:
             best_kda = max(kda_vals.values()) if kda_vals else 0
             best_wr = max(wr_vals.values()) if wr_vals else 0
 
+            # Supreme Leader - best composite (KDA rank + Win Rate rank)
+            ow2_composite = {}
+            for n, d in all_ow2.items():
+                g = d.get("stats", {}).get("general", {})
+                k = g.get("kda", 0) or 0
+                w = g.get("winrate", 0) or 0
+                ow2_composite[n] = k * 10 + w  # weight KDA heavily
+            ow2_supreme = max(ow2_composite, key=ow2_composite.get) if ow2_composite and max(ow2_composite.values()) > 0 else None
+
             # Battle Cards
             st.markdown("## Battle Cards")
             ow2_cards_html = []
@@ -830,10 +855,12 @@ with ow2_tab:
                 avatar_html = f'<img class="player-avatar" src="{avatar}" /><br>' if avatar else ""
                 rank_icon_html = f'<img class="rank-icon" src="{rank_icon}" />' if rank_icon else ""
 
+                ow2_supreme_badge = ' <span style="display:inline-block;background:linear-gradient(90deg,#ffd700,#ffaa00);color:#1a1a2e;padding:2px 8px;border-radius:12px;font-size:0.55em;font-weight:800;margin-left:6px;letter-spacing:0.5px;vertical-align:middle;">SUPREME LEADER</span>' if name == ow2_supreme and len(all_ow2) > 1 else ""
+
                 ow2_cards_html.append(f"""
-                <div class="battle-card">
+                <div class="battle-card" style="{'border-color:#ffd700;box-shadow:0 0 12px rgba(255,215,0,0.3);' if name == ow2_supreme and len(all_ow2) > 1 else ''}">
                     {avatar_html}
-                    <div class="player-name">{username}</div>
+                    <div class="player-name">{username}{ow2_supreme_badge}</div>
                     <div class="player-platform">{title} | Endorsement {endorsement}</div>
                     <div class="player-platform">{rank_icon_html} {rank_text}</div>
 
