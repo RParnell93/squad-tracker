@@ -775,9 +775,13 @@ with fn_tab:
                 st.dataframe(table_data, use_container_width=True, hide_index=True)
 
 
-            # AI Weekly Summary (always uses 7-day data)
-            if HAS_ANTHROPIC:
-                # Get API key from env first, then Streamlit secrets (bracket access)
+            # AI Weekly Summary
+            st.markdown("---")
+            st.markdown("## AI Weekly Summary")
+
+            if not HAS_ANTHROPIC:
+                st.caption("Install the `anthropic` package to enable AI summaries.")
+            else:
                 _anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
                 if not _anthropic_key:
                     try:
@@ -785,24 +789,29 @@ with fn_tab:
                     except (KeyError, FileNotFoundError):
                         _anthropic_key = ""
 
-                if _anthropic_key:
-                    st.markdown("---")
-                    st.markdown("## AI Weekly Summary")
-                    st.caption("Powered by Claude. Based on the last 7 days of stats for all squad members.")
+                if not _anthropic_key:
+                    st.caption("Add ANTHROPIC_API_KEY to secrets to enable AI summaries.")
+                else:
+                    st.caption("Powered by Claude. Based on the last 7 days of stats.")
 
-                    # Build stats context from 7-day cache
+                    # Build stats context - prefer 7-day cache, fall back to lifetime
                     summary_lines = []
+                    _using_lifetime = False
                     for name in names:
-                        aid = epic_ids.get(name)
-                        if not aid:
-                            continue
-                        s7_data = st.session_state.get("epic_cache", {}).get(f"epic_{aid}_7")
-                        if not s7_data:
-                            continue
-                        o7 = s7_data.get("all", {}).get("overall", {})
-                        if not o7 or not o7.get("matches", 0):
-                            continue
                         display = all_fn[name]["account"]["name"]
+                        o7 = None
+                        aid = epic_ids.get(name)
+                        if aid:
+                            s7_data = st.session_state.get("epic_cache", {}).get(f"epic_{aid}_7")
+                            if s7_data:
+                                o7 = s7_data.get("all", {}).get("overall", {})
+                        if not o7 or not o7.get("matches", 0):
+                            # Fall back to lifetime stats
+                            o7 = all_fn[name].get("stats", {}).get("all", {}).get("overall")
+                            if o7 and o7.get("matches", 0):
+                                _using_lifetime = True
+                            else:
+                                continue
                         summary_lines.append(
                             f"{display}: {o7.get('matches', 0)} matches, "
                             f"{o7.get('kills', 0)} kills, "
@@ -814,6 +823,9 @@ with fn_tab:
                             f"Top 10s {o7.get('top10', 0)}, "
                             f"Hours {round((o7.get('minutesPlayed', 0) or 0) / 60, 1)}"
                         )
+
+                    if _using_lifetime:
+                        st.caption("7-day stats unavailable for some players - using lifetime stats as fallback.")
 
                     if summary_lines:
                         stats_block = "\n".join(summary_lines)
@@ -853,7 +865,7 @@ Write a 3-5 paragraph weekly summary that:
                         if cache_key in st.session_state:
                             st.markdown(st.session_state[cache_key])
                     else:
-                        st.caption("No 7-day data available for AI summary.")
+                        st.caption("No player data available for AI summary.")
 
             # Data Definitions
             st.markdown("---")
