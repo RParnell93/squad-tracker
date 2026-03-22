@@ -591,7 +591,7 @@ if active_game == "Fortnite":
 
                 fn_cards_html.append(f"""
                 <div class="battle-card" style="{'border-color:#ffd700;box-shadow:0 0 12px rgba(255,215,0,0.3);' if is_supreme else ''}">
-                    <div class="player-name" style="display:flex;align-items:center;flex-wrap:nowrap;">{data['account']['name']}{'<span style="background:linear-gradient(90deg,#ffd700,#ffaa00);color:#1a1a2e;padding:1px 6px;border-radius:8px;font-size:0.45em;font-weight:800;margin-left:6px;letter-spacing:0.5px;white-space:nowrap;">SUPREME LEADER</span>' if is_supreme else ''}</div>
+                    <div class="player-name" style="display:flex;align-items:center;flex-wrap:wrap;gap:4px;">{data['account']['name']}{'<span style="background:linear-gradient(90deg,#ffd700,#ffaa00);color:#1a1a2e;padding:1px 6px;border-radius:8px;font-size:0.45em;font-weight:800;letter-spacing:0.5px;white-space:nowrap;">SUPREME LEADER</span>' if is_supreme else ''}</div>
                     <div class="player-platform" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">{_plat_tag} <span>BP Lv {bp.get('level', '?')}</span></div>
                     <div style="display: flex; justify-content: center; gap: 16px; margin-bottom: 12px;">
                         {circle_7d}{circle_30d}
@@ -613,7 +613,7 @@ if active_game == "Fortnite":
                     <div class="stat-row"><span class="stat-label">Players Outlived</span><span class="stat-value">{outlived:,}</span></div>
                     <div class="stat-row"><span class="stat-label">Outlived / Match</span><span class="stat-value">{opm}</span></div>
                     <div class="stat-row"><span class="stat-label">Hours Played</span><span class="stat-value">{hours:,.1f}</span></div>
-                    <div class="stat-row"><span class="stat-label">Last Active</span><span class="stat-value">{last_on}</span></div>
+                    {'<div class="stat-row"><span class="stat-label">Last Active</span><span class="stat-value">' + last_on + '</span></div>' if last_on else ''}
                 </div>""")
 
             # Render all cards in a scrollable row
