@@ -540,12 +540,16 @@ with fn_tab:
                     # Try MotherDuck first for historical weeks
                     db_data = None
                     week_ranges = get_all_week_ranges(12)
-                    if HAS_DUCKDB and "db_trends" not in st.session_state:
+                    if not HAS_DUCKDB:
+                        st.caption("duckdb not installed - using API fallback.")
+                    elif "db_trends" not in st.session_state:
                         with st.spinner("Loading trend data from database..."):
                             db_data = fetch_weekly_trends(list(all_fn.keys()), num_weeks=12)
                             if db_data is not None:
                                 st.session_state.db_trends = db_data
-                    elif "db_trends" in st.session_state:
+                            else:
+                                st.caption("Database unavailable - check MOTHERDUCK_TOKEN in secrets. Using API fallback.")
+                    if "db_trends" in st.session_state:
                         db_data = st.session_state.db_trends
 
                     if db_data is not None:
