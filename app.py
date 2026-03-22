@@ -769,7 +769,7 @@ if active_game == "Fortnite":
                 fig.add_trace(go.Scatter(
                     x=dates, y=values,
                     mode="lines+markers",
-                    line=dict(color="#e94560", width=3, shape="spline", smoothing=0.8),
+                    line=dict(color="#e94560", width=3),
                     marker=dict(size=6),
                     name=display_name,
                     hovertemplate="%{x|%b %d}<br>" + rolling_metric + ": %{y}<extra></extra>",
@@ -876,7 +876,7 @@ if active_game == "Fortnite":
                                        textposition="outside", orientation="h", hoverinfo="none"))
                 h = max(250, len(s_labels) * 40 + 80)
                 fig.update_layout(title=title, template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                                  height=h, font=dict(family="JetBrains Mono, monospace", color="white"), margin=dict(l=120, r=60))
+                                  height=h, font=dict(family="JetBrains Mono, monospace", color="white"), margin=dict(l=140, r=80))
                 st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
             c1, c2 = st.columns(2)
@@ -1330,7 +1330,7 @@ elif active_game == "Overwatch 2":
                                        textposition="outside", orientation="h", hoverinfo="none"))
                 h = max(250, len(s_labels) * 40 + 80)
                 fig.update_layout(title=title, template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-                                  height=h, font=dict(family="JetBrains Mono, monospace", color="white"), margin=dict(l=120, r=60))
+                                  height=h, font=dict(family="JetBrains Mono, monospace", color="white"), margin=dict(l=140, r=80))
                 st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
             c1, c2 = st.columns(2)
