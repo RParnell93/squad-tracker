@@ -13,7 +13,7 @@ DEFAULT_FORTNITE_PLAYERS = [
     {"name": "Jbone", "type": "epic", "platform": "Epic (PC)", "epic_name": "Jbone"},
     {"name": "hailedcanvas141", "type": "xbl", "platform": "Xbox", "epic_name": "DANDEBORD"},
     {"name": "mrfox733", "type": "xbl", "platform": "Xbox", "epic_name": "mrfox733"},
-    {"name": "gascan46310", "type": "xbl", "platform": "Xbox", "epic_name": "Gascan46310"},
+    {"name": "gascan46310", "type": "xbl", "platform": "Xbox", "epic_name": "Gascan46310", "epic_id": "caf1138b62b845108deaa20827a24777"},
 ]
 
 DEFAULT_OW2_PLAYERS = [

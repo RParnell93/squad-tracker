@@ -206,9 +206,15 @@ with fn_tab:
         if has_epic and "epic_ids" not in st.session_state:
             with st.spinner("Resolving Epic account IDs..."):
                 epic_ids = {}
+                # Build lookup of hardcoded epic_ids from config
+                config_ids = {p["name"]: p["epic_id"] for p in fn_players if p.get("epic_id")}
                 token = get_valid_token()
                 if token:
                     for name, data in all_fn.items():
+                        # Use hardcoded ID if available (for players with no Epic display name)
+                        if name in config_ids:
+                            epic_ids[name] = config_ids[name]
+                            continue
                         display = data.get("account", {}).get("name", name)
                         result = lookup_account_by_name(display, token)
                         if result:
