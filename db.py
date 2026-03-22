@@ -125,6 +125,80 @@ def fetch_player_cache(player_names):
         return None
 
 
+def fetch_daily_stats(player_names, num_days=14):
+    """Fetch daily stats for rolling chart.
+
+    Returns dict: {player_name: [{stat_date, kills, wins, matches, kd, ...}, ...]}
+    Days ordered oldest-first.
+    """
+    con = get_connection()
+    if not con:
+        return None
+
+    try:
+        cutoff = date.today() - timedelta(days=num_days)
+        rows = con.execute("""
+            SELECT player_name, stat_date, kills, deaths, wins, matches,
+                   score, players_outlived, minutes_played,
+                   kd, kills_per_match, win_rate, score_per_match
+            FROM daily_stats
+            WHERE stat_date >= ? AND player_name = ANY(?)
+            ORDER BY stat_date ASC
+        """, [cutoff, player_names]).fetchall()
+
+        columns = ["player_name", "stat_date", "kills", "deaths", "wins", "matches",
+                    "score", "players_outlived", "minutes_played",
+                    "kd", "kills_per_match", "win_rate", "score_per_match"]
+
+        result = {name: [] for name in player_names}
+        for row in rows:
+            entry = dict(zip(columns, row))
+            name = entry["player_name"]
+            if name in result:
+                result[name].append(entry)
+
+        con.close()
+        return result
+    except Exception as e:
+        logger.warning("daily_stats query failed: %s", e)
+        try:
+            con.close()
+        except Exception:
+            pass
+        return None
+
+
+def fetch_ow2_cache(player_names):
+    """Fetch cached OW2 stats from ow2_player_cache table.
+
+    Returns dict: {player_name: {summary: {...}, stats: {...}}}
+    Returns None if DB unavailable.
+    """
+    import json
+    con = get_connection()
+    if not con:
+        return None
+    try:
+        rows = con.execute("""
+            SELECT player_name, data_json
+            FROM ow2_player_cache
+            WHERE player_name = ANY(?)
+        """, [player_names]).fetchall()
+
+        result = {}
+        for player_name, data_json in rows:
+            result[player_name] = json.loads(data_json)
+        con.close()
+        return result
+    except Exception as e:
+        logger.warning("ow2_player_cache query failed: %s", e)
+        try:
+            con.close()
+        except Exception:
+            pass
+        return None
+
+
 def get_all_week_ranges(num_weeks=12):
     """Get the Mon-Sun week ranges for the last num_weeks completed weeks.
     Returns list of (week_start, week_end) tuples, oldest first.

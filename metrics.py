@@ -18,13 +18,13 @@ PERCENTILE_CURVES = {
         (8.0, 96), (10.0, 100),
     ],
     "Score/Match": [
-        (0, 0), (100, 10), (200, 22), (300, 35), (400, 45),
-        (500, 55), (700, 68), (900, 78), (1200, 88), (1500, 94), (2000, 100),
+        (0, 0), (50, 10), (100, 22), (150, 35), (200, 48),
+        (250, 58), (300, 68), (400, 80), (500, 88), (700, 94), (1000, 100),
     ],
     "Outlived/Match": [
-        (0, 0), (10, 5), (20, 14), (30, 24), (40, 35),
-        (50, 46), (60, 58), (70, 70), (75, 78), (80, 84),
-        (85, 90), (90, 95), (95, 100),
+        (0, 0), (5, 8), (10, 18), (20, 32), (30, 46),
+        (40, 58), (50, 70), (55, 78), (60, 84),
+        (65, 90), (70, 95), (80, 100),
     ],
 }
 
@@ -117,6 +117,64 @@ def perf_score(stats_dict, window_days=7):
     return min(round(scaled), 100)
 
 
+# OW2 Percentile curves - calibrated for casual-competitive friend groups
+OW2_CURVES = {
+    "kda": [
+        (0, 0), (1.0, 10), (1.5, 20), (2.0, 30), (2.5, 40),
+        (3.0, 50), (3.5, 58), (4.0, 66), (5.0, 78), (6.0, 86),
+        (7.0, 92), (8.0, 96), (10.0, 100),
+    ],
+    "winRate": [
+        (0, 0), (30, 10), (35, 18), (40, 28), (45, 40),
+        (48, 50), (50, 58), (52, 66), (55, 76), (58, 84),
+        (62, 90), (68, 96), (80, 100),
+    ],
+    "avgElims": [
+        (0, 0), (3, 10), (5, 22), (7, 35), (9, 48),
+        (11, 58), (13, 68), (16, 78), (20, 88), (25, 95), (30, 100),
+    ],
+    "avgDamage": [
+        (0, 0), (2000, 10), (3000, 22), (4000, 35), (5000, 46),
+        (6000, 56), (7000, 66), (8500, 78), (10000, 88), (12000, 95), (15000, 100),
+    ],
+}
+
+
+def ow2_perf_score(general_stats):
+    """OW2 Dub Score: 0-100 composite performance rating.
+
+    Components (percentile-based):
+        40% Win Rate       - winning is the point
+        30% KDA            - combat effectiveness
+        15% Avg Elims      - fragging ability
+        15% Avg Damage     - impact per game
+
+    Scaled by activity multiplier based on games played.
+    """
+    if not general_stats:
+        return None
+    games = general_stats.get("games_played", 0) or 0
+    if games == 0:
+        return None
+
+    wr = general_stats.get("winrate", 0) or 0
+    kda = general_stats.get("kda", 0) or 0
+    avg = general_stats.get("average", {})
+    avg_elims = avg.get("eliminations", 0) or 0
+    avg_dmg = avg.get("damage", 0) or 0
+
+    wr_pct = value_to_percentile(wr, OW2_CURVES["winRate"])
+    kda_pct = value_to_percentile(kda, OW2_CURVES["kda"])
+    elims_pct = value_to_percentile(avg_elims, OW2_CURVES["avgElims"])
+    dmg_pct = value_to_percentile(avg_dmg, OW2_CURVES["avgDamage"])
+
+    raw = 0.40 * wr_pct + 0.30 * kda_pct + 0.15 * elims_pct + 0.15 * dmg_pct
+    mult = _activity_multiplier(games, window_days=30)
+    scaled = raw * mult
+
+    return min(round(scaled), 100)
+
+
 def score_color(s):
     if s is None:
         return "#444"
@@ -136,7 +194,7 @@ def score_circle_html(score, label):
         score_text = str(score)
         deg = round(score * 3.6)
     color = score_color(score)
-    return f'''<div style="display:flex;flex-direction:column;align-items:center;">
+    return f'''<div style="display:flex;flex-direction:column;align-items:center;font-family:'JetBrains Mono',monospace;">
         <div style="width:clamp(56px,18vw,72px);height:clamp(56px,18vw,72px);border-radius:50%;background:conic-gradient({color} {deg}deg, #1a1a2e {deg}deg);display:flex;align-items:center;justify-content:center;">
             <div style="width:clamp(44px,14vw,58px);height:clamp(44px,14vw,58px);border-radius:50%;background:#16213e;display:flex;flex-direction:column;align-items:center;justify-content:center;">
                 <span style="color:white;font-size:clamp(14px,4vw,18px);font-weight:800;line-height:1;">{score_text}</span>

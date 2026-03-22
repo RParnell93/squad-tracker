@@ -21,9 +21,9 @@ from datetime import date, timedelta
 import duckdb
 import requests
 
-from config import DEFAULT_FORTNITE_PLAYERS, FORTNITE_API
+from config import DEFAULT_FORTNITE_PLAYERS, DEFAULT_OW2_PLAYERS, FORTNITE_API
 from epic_auth import get_valid_token, lookup_account_by_name, fetch_stats_epic, parse_raw_stats
-from api import epic_parsed_to_mode_stats
+from api import epic_parsed_to_mode_stats, search_ow2_player, fetch_ow2_stats
 
 MOTHERDUCK_TOKEN = os.environ.get("MOTHERDUCK_TOKEN", "")
 FORTNITE_API_KEY = os.environ.get("FORTNITE_API_KEY", "")
@@ -68,6 +68,34 @@ def setup_tables():
             data_json VARCHAR,
             fetched_at TIMESTAMP DEFAULT current_timestamp,
             PRIMARY KEY (player_name, "window")
+        )
+    """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS daily_stats (
+            player_name VARCHAR,
+            stat_date DATE,
+            kills INTEGER,
+            deaths INTEGER,
+            wins INTEGER,
+            matches INTEGER,
+            score INTEGER,
+            players_outlived INTEGER,
+            minutes_played INTEGER,
+            kd DOUBLE,
+            kills_per_match DOUBLE,
+            win_rate DOUBLE,
+            score_per_match DOUBLE,
+            created_at TIMESTAMP DEFAULT current_timestamp,
+            PRIMARY KEY (player_name, stat_date)
+        )
+    """)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS ow2_player_cache (
+            player_name VARCHAR,
+            player_id VARCHAR,
+            data_json VARCHAR,
+            fetched_at TIMESTAMP DEFAULT current_timestamp,
+            PRIMARY KEY (player_name)
         )
     """)
     print("Tables created (or already exist).")
@@ -279,6 +307,80 @@ def daily_refresh():
                 print(f"  {name}: {stats['matches']} matches")
             time.sleep(0.5)
 
+    # Daily stats - fetch yesterday and today
+    print("\n=== Daily Stats ===")
+    yesterday = date.today() - timedelta(days=1)
+    for stat_date in [yesterday, date.today()]:
+        print(f"\n--- {stat_date} ---")
+        for name, aid in ids.items():
+            existing = con.execute(
+                "SELECT 1 FROM daily_stats WHERE player_name = ? AND stat_date = ?",
+                [name, stat_date]
+            ).fetchone()
+            if existing and stat_date != date.today():
+                print(f"  {name}: already stored, skipping")
+                continue
+
+            stats = fetch_week_stats(aid, stat_date, stat_date)
+            if not stats:
+                print(f"  {name}: no games")
+                continue
+
+            stats["score_per_match"] = round(stats["score"] / max(stats["matches"], 1), 1)
+
+            if existing:
+                con.execute("""
+                    UPDATE daily_stats SET
+                        kills = ?, deaths = ?, wins = ?, matches = ?, score = ?,
+                        players_outlived = ?, minutes_played = ?,
+                        kd = ?, kills_per_match = ?, win_rate = ?, score_per_match = ?,
+                        created_at = current_timestamp
+                    WHERE player_name = ? AND stat_date = ?
+                """, [stats["kills"], stats["deaths"], stats["wins"], stats["matches"],
+                      stats["score"], stats["players_outlived"], stats["minutes_played"],
+                      stats["kd"], stats["kills_per_match"], stats["win_rate"], stats["score_per_match"],
+                      name, stat_date])
+                print(f"  {name}: updated - {stats['matches']} matches")
+            else:
+                con.execute("""
+                    INSERT INTO daily_stats (player_name, stat_date,
+                        kills, deaths, wins, matches, score, players_outlived, minutes_played,
+                        kd, kills_per_match, win_rate, score_per_match)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, [name, stat_date,
+                      stats["kills"], stats["deaths"], stats["wins"], stats["matches"],
+                      stats["score"], stats["players_outlived"], stats["minutes_played"],
+                      stats["kd"], stats["kills_per_match"], stats["win_rate"], stats["score_per_match"]])
+                print(f"  {name}: {stats['matches']} matches")
+            time.sleep(0.5)
+
+    # OW2 stats
+    print("\n=== Overwatch 2 Stats (OverFast API) ===")
+    for p in DEFAULT_OW2_PLAYERS:
+        name = p["name"]
+        pid = p.get("player_id")
+        print(f"  {name}...", end=" ")
+        if not pid:
+            search = search_ow2_player(name)
+            if search:
+                pid = search["player_id"]
+            else:
+                print("not found, skipping")
+                continue
+
+        data = fetch_ow2_stats(pid)
+        if data:
+            con.execute("""
+                INSERT OR REPLACE INTO ow2_player_cache (player_name, player_id, data_json, fetched_at)
+                VALUES (?, ?, ?, current_timestamp)
+            """, [name, pid, json.dumps(data)])
+            games = data.get("stats", {}).get("general", {}).get("games_played", 0)
+            kda = data.get("stats", {}).get("general", {}).get("kda", 0)
+            print(f"{games} games, KDA {kda:.2f}")
+        else:
+            print("no data")
+        time.sleep(1)
+
     con.close()
     print("\nDaily refresh complete!")
 
@@ -327,6 +429,54 @@ def backfill_weeks(num_weeks=12):
 
     con.close()
     print("\nBackfill complete!")
+
+
+def backfill_daily(num_days=14):
+    """Backfill daily_stats for the last N days."""
+    if not MOTHERDUCK_TOKEN:
+        print("Set MOTHERDUCK_TOKEN in .env or environment.")
+        return
+
+    print("Resolving Epic account IDs...")
+    ids = resolve_account_ids()
+    if not ids:
+        return
+
+    con = get_connection()
+    today = date.today()
+
+    for days_ago in range(num_days, -1, -1):
+        stat_date = today - timedelta(days=days_ago)
+        print(f"\n--- {stat_date} ---")
+        for name, aid in ids.items():
+            existing = con.execute(
+                "SELECT 1 FROM daily_stats WHERE player_name = ? AND stat_date = ?",
+                [name, stat_date]
+            ).fetchone()
+            if existing:
+                print(f"  {name}: already stored, skipping")
+                continue
+
+            stats = fetch_week_stats(aid, stat_date, stat_date)
+            if not stats:
+                print(f"  {name}: no games")
+                continue
+
+            stats["score_per_match"] = round(stats["score"] / max(stats["matches"], 1), 1)
+            con.execute("""
+                INSERT INTO daily_stats (player_name, stat_date,
+                    kills, deaths, wins, matches, score, players_outlived, minutes_played,
+                    kd, kills_per_match, win_rate, score_per_match)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [name, stat_date,
+                  stats["kills"], stats["deaths"], stats["wins"], stats["matches"],
+                  stats["score"], stats["players_outlived"], stats["minutes_played"],
+                  stats["kd"], stats["kills_per_match"], stats["win_rate"], stats["score_per_match"]])
+            print(f"  {name}: {stats['matches']} matches, K/D {stats['kd']}")
+            time.sleep(0.5)
+
+    con.close()
+    print("\nDaily backfill complete!")
 
 
 def check_db():
@@ -385,6 +535,10 @@ if __name__ == "__main__":
         idx = sys.argv.index("--backfill")
         weeks = int(sys.argv[idx + 1]) if idx + 1 < len(sys.argv) else 12
         backfill_weeks(num_weeks=weeks)
+    elif "--backfill-daily" in sys.argv:
+        idx = sys.argv.index("--backfill-daily")
+        days = int(sys.argv[idx + 1]) if idx + 1 < len(sys.argv) else 14
+        backfill_daily(num_days=days)
     elif "--check" in sys.argv:
         check_db()
     else:

@@ -21,7 +21,6 @@ DEFAULT_OW2_PLAYERS = [
     {"name": "Batzz", "player_id": "d05fb890a93cc9f9bea1%7Cee7e46b8d5cd02a21bd084bd5004fdbe"},
     {"name": "GasCan", "player_id": "d55fbfa9b27fd6fcb8a220a4%7C60d238a9723f0c5c425ab4c56d4579b8"},
     {"name": "GreyBeast", "player_id": "d54ca99391749abefdbd25a7d607a5%7C2b7fa8e1b80a57998ee25a9d17f99925"},
-    {"name": "Paulpummeler"},
     {"name": "i7vosunz458"},
 ]
 
@@ -29,18 +28,20 @@ DEFAULT_OW2_PLAYERS = [
 def card_css(accent="#e94560", badge_color="#e94560"):
     return f"""
     <style>
-        .cards-scroll {{ display: flex; gap: 16px; overflow-x: auto; padding: 8px 0 16px 0; }}
-        .cards-scroll .battle-card {{ min-width: 280px; max-width: 340px; flex: 1 0 280px; }}
-        .battle-card {{ background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); border-radius: 16px; padding: 20px; border: 2px solid {accent}; color: white; overflow: hidden; word-wrap: break-word; box-sizing: border-box; }}
-        .player-name {{ font-size: 1.1em; font-weight: 800; margin-bottom: 4px; color: {accent}; text-transform: uppercase; letter-spacing: 1px; }}
-        .player-platform {{ font-size: 0.8em; color: #a8a8b3; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px; }}
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&display=swap');
+        .cards-scroll {{ font-family: 'JetBrains Mono', monospace; }}
+        .cards-scroll {{ display: flex; gap: 16px; overflow-x: auto; padding: 8px 0 16px 0; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }}
+        .cards-scroll .battle-card {{ min-width: 280px; max-width: 340px; flex: 1 0 280px; scroll-snap-align: start; }}
+        .battle-card {{ background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); border-radius: 16px; padding: 20px; border: 2px solid {accent}; color: white; overflow: hidden; word-wrap: break-word; box-sizing: border-box; font-family: 'JetBrains Mono', monospace; }}
+        .player-name {{ font-size: 1.1em; font-weight: 800; margin-bottom: 4px; color: {accent}; text-transform: uppercase; letter-spacing: 0.5px; }}
+        .player-platform {{ font-size: 0.8em; color: #a8a8b3; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }}
         .stat-row {{ display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.08); }}
         .stat-label {{ color: #a8a8b3; font-size: 0.82em; white-space: nowrap; }}
         .stat-value {{ color: white; font-weight: 700; font-size: 0.9em; white-space: nowrap; }}
         .stat-highlight {{ color: {accent}; font-weight: 700; font-size: 0.9em; white-space: nowrap; }}
         .big-stat {{ text-align: center; padding: 8px; }}
         .big-stat-value {{ font-size: 1.8em; font-weight: 800; color: white; }}
-        .big-stat-label {{ font-size: 0.7em; color: #a8a8b3; text-transform: uppercase; letter-spacing: 1px; }}
+        .big-stat-label {{ font-size: 0.7em; color: #a8a8b3; text-transform: uppercase; letter-spacing: 0.5px; }}
         .rank-badge {{ display: inline-block; background: {badge_color}; color: white; padding: 2px 6px; border-radius: 12px; font-size: 0.65em; font-weight: 700; margin-left: 4px; white-space: nowrap; }}
         .player-avatar {{ width: 64px; height: 64px; border-radius: 50%; border: 2px solid {accent}; margin-bottom: 8px; }}
         .rank-icon {{ width: 40px; height: 40px; vertical-align: middle; margin-right: 6px; }}
@@ -67,6 +68,38 @@ def card_css(accent="#e94560", badge_color="#e94560"):
 # Global CSS - minimal styles for non-card elements (cards use scoped styles in st.html)
 CSS = """
 <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
+
+    /* Global font override */
+    html, body, [class*="css"], .stApp,
+    [data-testid="stSidebar"],
+    [data-testid="stSidebar"] * {
+        font-family: 'JetBrains Mono', monospace !important;
+    }
+    /* Headings - tighter tracking for mono */
+    h1, h2, h3, h4, h5, h6,
+    .stApp h1, .stApp h2, .stApp h3 {
+        font-family: 'JetBrains Mono', monospace !important;
+        letter-spacing: -0.5px;
+    }
+    /* Inputs and selects */
+    input, select, textarea, button,
+    [data-testid="stTextInput"] input,
+    [data-testid="stSelectbox"] div,
+    .stButton button {
+        font-family: 'JetBrains Mono', monospace !important;
+    }
+    /* Tabs / segmented control */
+    [data-testid="stSegmentedControl"] button {
+        font-family: 'JetBrains Mono', monospace !important;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+    /* Dataframes */
+    .stDataFrame, .stDataFrame td, .stDataFrame th {
+        font-family: 'JetBrains Mono', monospace !important;
+    }
+
     .mode-tab {
         background: rgba(255,255,255,0.05);
         border-radius: 8px;
@@ -78,8 +111,17 @@ CSS = """
         color: #e94560;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 1px;
+        letter-spacing: 0.5px;
         margin-bottom: 8px;
+    }
+    /* Prose sections - proportional font for readability */
+    .prose-section p, .prose-section li, .prose-section td {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+        font-size: 0.92em;
+        line-height: 1.6;
+    }
+    .prose-section th, .prose-section strong {
+        font-family: 'JetBrains Mono', monospace !important;
     }
 </style>
 """

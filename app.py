@@ -1,4 +1,5 @@
 import os
+import random
 import streamlit as st
 import time
 from datetime import date, datetime, timedelta
@@ -21,10 +22,10 @@ from api import (
 )
 from metrics import (
     SCORE_CURVES, PERCENTILE_CURVES, value_to_percentile, pct_color,
-    perf_score, score_color, score_circle_html,
+    perf_score, ow2_perf_score, score_color, score_circle_html,
 )
 from helpers import get_fortnite_api_key, load_squad, save_squad
-from db import fetch_weekly_trends, fetch_player_cache, get_all_week_ranges, HAS_DUCKDB
+from db import fetch_weekly_trends, fetch_player_cache, fetch_ow2_cache, get_all_week_ranges, HAS_DUCKDB
 
 st.set_page_config(page_title="Squad Tracker", page_icon="🎮", layout="wide")
 
@@ -33,155 +34,296 @@ st.markdown(CSS, unsafe_allow_html=True)
 
 
 # ── State / Persistence ─────────────────────────────────────────────────────
+# Build lookup dicts for restoring full player objects from names
+_fn_lookup = {p["name"].lower(): p for p in DEFAULT_FORTNITE_PLAYERS}
+_ow2_lookup = {p["name"].lower(): p for p in DEFAULT_OW2_PLAYERS}
+
+
+def _resolve_fn_player(name):
+    """Resolve a Fortnite player name to a full player dict."""
+    match = _fn_lookup.get(name.lower())
+    if match:
+        return dict(match)
+    return {"name": name, "type": "epic", "platform": "Epic (PC)"}
+
+
+def _resolve_ow2_player(name):
+    """Resolve an OW2 player name to a full player dict."""
+    match = _ow2_lookup.get(name.lower())
+    if match:
+        return dict(match)
+    return {"name": name}
+
+
+def _sync_squad_to_url():
+    """Write current squad to URL query params (enables bookmarking + sharing)."""
+    fn_names = [p["name"] for p in st.session_state.squad.get("fortnite_players", [])]
+    ow2_names = [p["name"] for p in st.session_state.squad.get("ow2_players", [])]
+    st.query_params["fn"] = ",".join(fn_names) if fn_names else ""
+    st.query_params["ow2"] = ",".join(ow2_names) if ow2_names else ""
+
+
+def _save_and_sync(squad_data):
+    """Save squad to file + sync to URL params + push to localStorage."""
+    save_squad(squad_data)
+    _sync_squad_to_url()
+
+
+# localStorage bridge - reads on first load, writes on every sync
+_LS_BRIDGE = """
+<script>
+(function() {
+    const params = new URLSearchParams(window.location.search);
+    const hasFn = params.has('fn') && params.get('fn').length > 0;
+    const hasOw2 = params.has('ow2') && params.get('ow2').length > 0;
+
+    if (hasFn || hasOw2) {
+        // URL has squad params - save to localStorage
+        if (hasFn) localStorage.setItem('squad_fn', params.get('fn'));
+        if (hasOw2) localStorage.setItem('squad_ow2', params.get('ow2'));
+    } else if (params.has('fn') || params.has('ow2')) {
+        // URL has empty params - user cleared their squad, clear localStorage too
+        localStorage.removeItem('squad_fn');
+        localStorage.removeItem('squad_ow2');
+    } else {
+        // No URL params - check localStorage and redirect if found
+        const savedFn = localStorage.getItem('squad_fn');
+        const savedOw2 = localStorage.getItem('squad_ow2');
+        if (savedFn || savedOw2) {
+            const newParams = new URLSearchParams();
+            if (savedFn) newParams.set('fn', savedFn);
+            if (savedOw2) newParams.set('ow2', savedOw2);
+            const newUrl = window.location.pathname + '?' + newParams.toString();
+            window.location.replace(newUrl);
+        }
+    }
+})();
+</script>
+"""
+st.components.v1.html(_LS_BRIDGE, height=0)
+
 if "squad" not in st.session_state:
-    st.session_state.squad = load_squad()
-    if "players" in st.session_state.squad:
-        st.session_state.squad["fortnite_players"] = st.session_state.squad.pop("players", [])
-    # Use default player lists (add missing, remove dropped)
-    fn_default_names = {p["name"] for p in DEFAULT_FORTNITE_PLAYERS}
-    ow2_default_names = {p["name"] for p in DEFAULT_OW2_PLAYERS}
-    # Keep only players still in defaults or manually added (not in any prior default set)
-    st.session_state.squad.setdefault("fortnite_players", [])
-    st.session_state.squad.setdefault("ow2_players", [])
-    # Start fresh with defaults
-    st.session_state.squad["fortnite_players"] = list(DEFAULT_FORTNITE_PLAYERS)
-    st.session_state.squad["ow2_players"] = list(DEFAULT_OW2_PLAYERS)
+    params = st.query_params
+    fn_param = params.get("fn", "")
+    ow2_param = params.get("ow2", "")
+
+    if fn_param or ow2_param:
+        # Restore squad from URL params
+        fn_players = [_resolve_fn_player(n.strip()) for n in fn_param.split(",") if n.strip()] if fn_param else []
+        ow2_players = [_resolve_ow2_player(n.strip()) for n in ow2_param.split(",") if n.strip()] if ow2_param else []
+        st.session_state.squad = {
+            "fortnite_players": fn_players,
+            "ow2_players": ow2_players,
+        }
+    else:
+        # First visit with no params - load defaults
+        st.session_state.squad = {
+            "fortnite_players": list(DEFAULT_FORTNITE_PLAYERS),
+            "ow2_players": list(DEFAULT_OW2_PLAYERS),
+        }
+        _sync_squad_to_url()
 
 if "ow2_cache" not in st.session_state:
     st.session_state.ow2_cache = {}
 
 
-# ── Sidebar ──────────────────────────────────────────────────────────────────
-st.sidebar.title("Squad Setup")
-
-game_tab = st.sidebar.radio("Game", ["Fortnite", "Overwatch 2"], horizontal=True)
-
-if game_tab == "Fortnite":
-    has_secret = False
-    try:
-        has_secret = bool(st.secrets["FORTNITE_API_KEY"])
-    except Exception:
-        pass
-
-    if not has_secret:
-        api_key_input = st.sidebar.text_input(
-            "Fortnite API Key",
-            value="",
-            type="password",
-            help="Get a free key at dash.fortnite-api.com",
-        )
-        st.session_state["fn_api_key_input"] = api_key_input
-
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("Add Fortnite Player")
-    platform_map = {"Xbox": "xbl", "PlayStation": "psn", "Epic (PC)": "epic"}
-
-    # Quick-add presets
-    preset_players = list(DEFAULT_FORTNITE_PLAYERS)
-    current_names = {p["name"] for p in st.session_state.squad.get("fortnite_players", [])}
-    available_presets = [p for p in preset_players if p["name"] not in current_names]
-
-    if available_presets:
-        preset_names = ["-- Select a friend --"] + [f"{p['name']} ({p['platform']})" for p in available_presets]
-        preset_choice = st.sidebar.selectbox("Quick Add", preset_names, key="fn_preset")
-        if st.sidebar.button("Add Selected", key="fn_preset_add", width="stretch"):
-            idx = preset_names.index(preset_choice) - 1
-            if idx >= 0:
-                st.session_state.squad["fortnite_players"].append(available_presets[idx])
-                save_squad(st.session_state.squad)
-                st.rerun()
-        if st.sidebar.button("Add All Friends", key="fn_preset_all", width="stretch"):
-            st.session_state.squad["fortnite_players"].extend(available_presets)
-            save_squad(st.session_state.squad)
-            st.rerun()
-
-    st.sidebar.caption("Or add manually:")
-    col1, col2 = st.sidebar.columns([2, 1])
-    new_name = col1.text_input("Gamertag / Epic Name", key="fn_new_name")
-    new_platform = col2.selectbox("Platform", list(platform_map.keys()), key="fn_platform")
-
-    if st.sidebar.button("Add Player", key="fn_add", width="stretch"):
-        if new_name.strip():
-            st.session_state.squad["fortnite_players"].append({
-                "name": new_name.strip(),
-                "type": platform_map[new_platform],
-                "platform": new_platform,
-            })
-            save_squad(st.session_state.squad)
-            st.rerun()
-
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("Fortnite Squad")
-    to_remove = None
-    for i, p in enumerate(st.session_state.squad.get("fortnite_players", [])):
-        col_name, col_btn = st.sidebar.columns([3, 1])
-        col_name.markdown(f"**{p['name']}** ({p['platform']})")
-        if col_btn.button("X", key=f"fn_rm_{i}"):
-            to_remove = i
-    if to_remove is not None:
-        st.session_state.squad["fortnite_players"].pop(to_remove)
-        save_squad(st.session_state.squad)
-        st.rerun()
-
-else:  # OW2
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("Add OW2 Player")
-
-    ow2_preset_players = list(DEFAULT_OW2_PLAYERS)
-    ow2_current = {p["name"] for p in st.session_state.squad.get("ow2_players", [])}
-    ow2_available = [p for p in ow2_preset_players if p["name"] not in ow2_current]
-
-    if ow2_available:
-        ow2_preset_names = ["-- Select a friend --"] + [p["name"] for p in ow2_available]
-        ow2_choice = st.sidebar.selectbox("Quick Add", ow2_preset_names, key="ow2_preset")
-        if st.sidebar.button("Add Selected", key="ow2_preset_add", width="stretch"):
-            ow2_idx = ow2_preset_names.index(ow2_choice) - 1
-            if ow2_idx >= 0:
-                st.session_state.squad["ow2_players"].append(ow2_available[ow2_idx])
-                save_squad(st.session_state.squad)
-                st.rerun()
-        if st.sidebar.button("Add All Friends", key="ow2_preset_all", width="stretch"):
-            st.session_state.squad["ow2_players"].extend(ow2_available)
-            save_squad(st.session_state.squad)
-            st.rerun()
-
-    st.sidebar.caption("Or add manually (display name, profile must be public):")
-    new_ow2 = st.sidebar.text_input("Display Name", key="ow2_new_name")
-
-    if st.sidebar.button("Add Player", key="ow2_add", width="stretch"):
-        if new_ow2.strip():
-            st.session_state.squad["ow2_players"].append({"name": new_ow2.strip()})
-            save_squad(st.session_state.squad)
-            st.rerun()
-
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("OW2 Squad")
-    to_remove = None
-    for i, p in enumerate(st.session_state.squad.get("ow2_players", [])):
-        col_name, col_btn = st.sidebar.columns([3, 1])
-        col_name.markdown(f"**{p['name']}**")
-        if col_btn.button("X", key=f"ow2_rm_{i}"):
-            to_remove = i
-    if to_remove is not None:
-        st.session_state.squad["ow2_players"].pop(to_remove)
-        save_squad(st.session_state.squad)
-        st.rerun()
-
-
 # ── Main Area ────────────────────────────────────────────────────────────────
-st.title("SQUAD TRACKER")
+_logo_svg = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="36" height="36" style="vertical-align:middle;margin-right:10px;">
+  <circle cx="20" cy="20" r="16" fill="none" stroke="#e94560" stroke-width="2.5" opacity="0.9"/>
+  <circle cx="20" cy="20" r="8" fill="none" stroke="#e94560" stroke-width="1.5" opacity="0.6"/>
+  <circle cx="20" cy="20" r="2.5" fill="#e94560"/>
+  <line x1="20" y1="1" x2="20" y2="10" stroke="#e94560" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+  <line x1="20" y1="30" x2="20" y2="39" stroke="#e94560" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+  <line x1="1" y1="20" x2="10" y2="20" stroke="#e94560" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+  <line x1="30" y1="20" x2="39" y2="20" stroke="#e94560" stroke-width="2" stroke-linecap="round" opacity="0.7"/>
+</svg>'''
+st.markdown(
+    f'<h1 style="display:flex;align-items:center;margin-bottom:0;">{_logo_svg}<span>SQUAD TRACKER</span></h1>',
+    unsafe_allow_html=True,
+)
 
-fn_tab, ow2_tab = st.tabs(["FORTNITE", "OVERWATCH 2"])
+active_game = st.segmented_control(
+    "Game", ["Fortnite", "Overwatch 2"], default="Fortnite",
+    key="active_game", label_visibility="collapsed",
+)
+if not active_game:
+    active_game = "Fortnite"
+
+# ── Sidebar (driven by active game) ─────────────────────────────────────────
+with st.sidebar:
+    # Sidebar styling
+    _sb_accent = "#e94560" if active_game == "Fortnite" else "#f99e1a"
+    st.markdown(f"""<style>
+    [data-testid="stSidebar"] {{
+        background: linear-gradient(180deg, #0d1117 0%, #161b22 40%, #1a1a2e 100%);
+    }}
+    [data-testid="stSidebar"] .stMarkdown hr {{
+        border-color: rgba(255,255,255,0.06);
+        margin: 0.8rem 0;
+    }}
+    .sidebar-header {{
+        display: flex; align-items: center; gap: 10px;
+        padding: 8px 12px; margin-bottom: 4px;
+        background: linear-gradient(135deg, {_sb_accent}18, {_sb_accent}08);
+        border-left: 3px solid {_sb_accent};
+        border-radius: 0 8px 8px 0;
+    }}
+    .sidebar-header .icon {{ font-size: 1.3em; }}
+    .sidebar-header .title {{
+        font-size: 1.05em; font-weight: 700; color: #e6e6e6;
+        letter-spacing: 0.5px; text-transform: uppercase;
+    }}
+    .sidebar-section {{
+        font-size: 0.65em; font-weight: 600; color: {_sb_accent};
+        text-transform: uppercase; letter-spacing: 0.5px;
+        margin: 12px 0 6px 0; opacity: 0.8;
+    }}
+    .player-row {{
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 6px 10px; margin: 3px 0;
+        background: rgba(255,255,255,0.03);
+        border-radius: 6px;
+        transition: background 0.2s;
+    }}
+    .player-row:hover {{ background: rgba(255,255,255,0.06); }}
+    .player-name {{
+        font-weight: 600; font-size: 0.88em; color: #e6e6e6;
+    }}
+    .plat-tag {{
+        padding: 1px 7px; border-radius: 4px;
+        font-size: 0.6em; font-weight: 700; letter-spacing: 0.5px;
+        color: white; vertical-align: middle; margin-left: 6px;
+    }}
+    .sidebar-share {{
+        padding: 8px 12px; margin-top: 4px;
+        background: rgba(255,255,255,0.02);
+        border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);
+    }}
+    .sidebar-share p {{
+        font-size: 0.72em; color: #6e7681; line-height: 1.4; margin: 0;
+    }}
+    </style>""", unsafe_allow_html=True)
+
+    _game_icon = "🎯" if active_game == "Fortnite" else "🛡️"
+    _game_label = "Fortnite" if active_game == "Fortnite" else "Overwatch 2"
+    st.markdown(f'<div class="sidebar-header"><span class="icon">{_game_icon}</span><span class="title">{_game_label} Squad</span></div>', unsafe_allow_html=True)
+
+    if active_game == "Fortnite":
+        platform_map = {"Xbox": "xbl", "PlayStation": "psn", "Epic (PC)": "epic"}
+
+        preset_players = list(DEFAULT_FORTNITE_PLAYERS)
+        current_names = {p["name"] for p in st.session_state.squad.get("fortnite_players", [])}
+        available_presets = [p for p in preset_players if p["name"] not in current_names]
+
+        if available_presets:
+            st.markdown('<div class="sidebar-section">Quick Add</div>', unsafe_allow_html=True)
+            preset_names = ["-- Select a friend --"] + [f"{p['name']} ({p['platform']})" for p in available_presets]
+            preset_choice = st.selectbox("Quick Add", preset_names, key="fn_preset", label_visibility="collapsed")
+            c1, c2 = st.columns(2)
+            if c1.button("Add Selected", key="fn_preset_add", width="stretch"):
+                idx = preset_names.index(preset_choice) - 1
+                if idx >= 0:
+                    st.session_state.squad["fortnite_players"].append(available_presets[idx])
+                    _save_and_sync(st.session_state.squad)
+                    st.rerun()
+            if c2.button("Add All", key="fn_preset_all", width="stretch"):
+                st.session_state.squad["fortnite_players"].extend(available_presets)
+                _save_and_sync(st.session_state.squad)
+                st.rerun()
+
+        with st.expander("Add Custom Player"):
+            col1, col2 = st.columns([2, 1])
+            new_name = col1.text_input("Gamertag", key="fn_new_name", label_visibility="collapsed", placeholder="Gamertag")
+            new_platform = col2.selectbox("Platform", list(platform_map.keys()), key="fn_platform", label_visibility="collapsed")
+            if st.button("Add Player", key="fn_add", width="stretch"):
+                if new_name.strip():
+                    st.session_state.squad["fortnite_players"].append({
+                        "name": new_name.strip(),
+                        "type": platform_map[new_platform],
+                        "platform": new_platform,
+                    })
+                    _save_and_sync(st.session_state.squad)
+                    st.rerun()
+
+        st.markdown("---")
+        _platform_colors = {"Xbox": "#2d9f2d", "PlayStation": "#006fcd", "Epic (PC)": "#6b6b7b"}
+        _plat_short = {"Xbox": "XBOX", "PlayStation": "PSN", "Epic (PC)": "PC"}
+        fn_list = st.session_state.squad.get("fortnite_players", [])
+        if fn_list:
+            st.markdown(f'<div class="sidebar-section">Your Squad ({len(fn_list)})</div>', unsafe_allow_html=True)
+        to_remove = None
+        for i, p in enumerate(fn_list):
+            col_name, col_btn = st.columns([3, 1])
+            _pc = _platform_colors.get(p['platform'], '#a8a8b3')
+            _ps = _plat_short.get(p['platform'], p['platform'].upper())
+            col_name.markdown(
+                f'<span class="player-name">{p["name"]}</span> <span class="plat-tag" style="background:{_pc};">{_ps}</span>',
+                unsafe_allow_html=True,
+            )
+            if col_btn.button("✕", key=f"fn_rm_{i}"):
+                to_remove = i
+        if to_remove is not None:
+            st.session_state.squad["fortnite_players"].pop(to_remove)
+            _save_and_sync(st.session_state.squad)
+            st.rerun()
+
+    else:  # OW2
+        ow2_preset_players = list(DEFAULT_OW2_PLAYERS)
+        ow2_current = {p["name"] for p in st.session_state.squad.get("ow2_players", [])}
+        ow2_available = [p for p in ow2_preset_players if p["name"] not in ow2_current]
+
+        if ow2_available:
+            st.markdown('<div class="sidebar-section">Quick Add</div>', unsafe_allow_html=True)
+            ow2_preset_names = ["-- Select a friend --"] + [p["name"] for p in ow2_available]
+            ow2_choice = st.selectbox("Quick Add", ow2_preset_names, key="ow2_preset", label_visibility="collapsed")
+            c1, c2 = st.columns(2)
+            if c1.button("Add Selected", key="ow2_preset_add", width="stretch"):
+                ow2_idx = ow2_preset_names.index(ow2_choice) - 1
+                if ow2_idx >= 0:
+                    st.session_state.squad["ow2_players"].append(ow2_available[ow2_idx])
+                    _save_and_sync(st.session_state.squad)
+                    st.rerun()
+            if c2.button("Add All", key="ow2_preset_all", width="stretch"):
+                st.session_state.squad["ow2_players"].extend(ow2_available)
+                _save_and_sync(st.session_state.squad)
+                st.rerun()
+
+        with st.expander("Add Custom Player"):
+            new_ow2 = st.text_input("Display Name", key="ow2_new_name", label_visibility="collapsed", placeholder="BattleTag (public profile)")
+            if st.button("Add Player", key="ow2_add", width="stretch"):
+                if new_ow2.strip():
+                    st.session_state.squad["ow2_players"].append({"name": new_ow2.strip()})
+                    _save_and_sync(st.session_state.squad)
+                    st.rerun()
+
+        st.markdown("---")
+        ow2_list = st.session_state.squad.get("ow2_players", [])
+        if ow2_list:
+            st.markdown(f'<div class="sidebar-section">Your Squad ({len(ow2_list)})</div>', unsafe_allow_html=True)
+        to_remove = None
+        for i, p in enumerate(ow2_list):
+            col_name, col_btn = st.columns([3, 1])
+            col_name.markdown(f'<span class="player-name">{p["name"]}</span> <span class="plat-tag" style="background:#f99e1a;">OW2</span>', unsafe_allow_html=True)
+            if col_btn.button("✕", key=f"ow2_rm_{i}"):
+                to_remove = i
+        if to_remove is not None:
+            st.session_state.squad["ow2_players"].pop(to_remove)
+            _save_and_sync(st.session_state.squad)
+            st.rerun()
+
+    st.markdown("---")
+    st.markdown('<div class="sidebar-share"><p>Your squad auto-saves in this browser. Share the link to let friends load your squad.</p></div>', unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════
-# FORTNITE TAB
+# FORTNITE
 # ═══════════════════════════════════════════════════════════════════════════
-with fn_tab:
+if active_game == "Fortnite":
     fn_players = st.session_state.squad.get("fortnite_players", [])
     if not fn_players:
         st.info("Add Fortnite players in the sidebar.")
     else:
-        if st.button("Refresh Stats", width="stretch"):
+        _, col_refresh, _ = st.columns([2, 1, 2])
+        if col_refresh.button("Refresh", key="fn_refresh", icon="🔄", width="stretch"):
             st.session_state.pop("db_player_cache", None)
             st.session_state.pop("db_trends", None)
             st.session_state.pop("epic_ids", None)
@@ -408,6 +550,10 @@ with fn_tab:
                 overall = player_mode(name)
                 bp = data.get("battlePass", {})
                 platform = next((p["platform"] for p in fn_players if p["name"] == name), "")
+                _plat_colors = {"Xbox": "#2d9f2d", "PlayStation": "#006fcd", "Epic (PC)": "#6b6b7b"}
+                _plat_abbr = {"Xbox": "XBOX", "PlayStation": "PSN", "Epic (PC)": "PC"}
+                _plat_c = _plat_colors.get(platform, "#6b6b7b")
+                _plat_tag = f'<span style="background:{_plat_c};color:white;padding:2px 8px;border-radius:4px;font-size:0.7em;font-weight:700;letter-spacing:0.5px;">{_plat_abbr.get(platform, platform)}</span>'
 
                 kd = overall.get("kd", 0) or 0
                 wr = overall.get("winRate", 0) or 0
@@ -441,17 +587,17 @@ with fn_tab:
                 fn_cards_html.append(f"""
                 <div class="battle-card" style="{'border-color:#ffd700;box-shadow:0 0 12px rgba(255,215,0,0.3);' if is_supreme else ''}">
                     <div class="player-name" style="display:flex;align-items:center;flex-wrap:nowrap;">{data['account']['name']}{'<span style="background:linear-gradient(90deg,#ffd700,#ffaa00);color:#1a1a2e;padding:1px 6px;border-radius:8px;font-size:0.45em;font-weight:800;margin-left:6px;letter-spacing:0.5px;white-space:nowrap;">SUPREME LEADER</span>' if is_supreme else ''}</div>
-                    <div class="player-platform">{platform} | BP Lv {bp.get('level', '?')} | {window_label}</div>
+                    <div class="player-platform" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">{_plat_tag} <span>BP Lv {bp.get('level', '?')}</span> <span>{window_label}</span></div>
                     <div style="display: flex; justify-content: center; gap: 16px; margin-bottom: 12px;">
                         {circle_7d}{circle_30d}
                     </div>
                     <div style="display: flex; justify-content: space-around; margin-bottom: 16px;">
                         <div class="big-stat"><div class="big-stat-value">{kd:.2f}</div><div class="big-stat-label">K/D</div></div>
-                        <div class="big-stat"><div class="big-stat-value">{wins:,} <span style="font-size:0.5em;color:#90caf9;">({wr:.1f}%)</span></div><div class="big-stat-label">Dubs</div></div>
+                        <div class="big-stat"><div class="big-stat-value">{wins:,}<span style="font-size:0.4em;color:rgba(144,202,249,0.5);font-weight:600;margin-left:4px;">{wr:.1f}%</span></div><div class="big-stat-label">Dubs</div></div>
                         <div class="big-stat"><div class="big-stat-value">{kpm:.2f}</div><div class="big-stat-label">Kills/Match</div></div>
                     </div>
                     <div class="stat-row"><span class="stat-label">Matches</span><span class="stat-value">{matches:,}</span></div>
-                    <div class="stat-row"><span class="stat-label">Dubs</span><span class="stat-highlight">{wins:,} <span style="color:#90caf9;">({wr:.1f}%)</span>{wins_badge}</span></div>
+                    <div class="stat-row"><span class="stat-label">Dubs</span><span class="stat-highlight">{wins:,} <span style="font-size:0.8em;color:rgba(144,202,249,0.45);">{wr:.1f}%</span>{wins_badge}</span></div>
                     <div class="stat-row"><span class="stat-label">Total Kills</span><span class="stat-highlight">{kills:,}{kills_badge}</span></div>
                     <div class="stat-row"><span class="stat-label">Deaths</span><span class="stat-value">{deaths:,}</span></div>
                     <div class="stat-row"><span class="stat-label">K/D Ratio</span><span class="stat-highlight">{kd:.2f}{kd_badge}</span></div>
@@ -542,13 +688,99 @@ with fn_tab:
                     template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)",
                     paper_bgcolor="rgba(0,0,0,0)", height=400,
                     yaxis_title=metric_info["axis"], yaxis_range=y_range,
-                    font=dict(color="white"),
+                    font=dict(family="JetBrains Mono, monospace", color="white"),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10)),
                     margin=dict(t=60, b=40),
                 )
                 st.plotly_chart(fig, width="stretch")
 
             render_trend()
+
+            # Player Deep Dive - weekly trend per player with more metrics
+            st.markdown("---")
+
+            @st.fragment
+            def render_player_trend():
+                PLAYER_METRICS = {
+                    "Cumulative Dubs": {"key": "wins", "fmt": lambda v: int(v), "axis": "Total Wins", "cumulative": True},
+                    "K/D Ratio": {"key": "kd", "fmt": lambda v: round(v, 2), "axis": "K/D"},
+                    "Kills/Game": {"key": "kills_per_match", "fmt": lambda v: round(v, 2), "axis": "Kills per Match"},
+                    "Win Rate": {"key": "win_rate", "fmt": lambda v: round(v, 1), "axis": "Win Rate %"},
+                }
+
+                col_player, col_metric, _ = st.columns([1, 1, 1])
+                with col_player:
+                    rolling_player = st.selectbox(
+                        "Player", names,
+                        format_func=lambda n: all_fn[n]["account"]["name"],
+                        key="player_trend_select",
+                    )
+                with col_metric:
+                    rolling_metric = st.selectbox(
+                        "Stat", list(PLAYER_METRICS.keys()), index=1,
+                        key="player_metric_select",
+                    )
+
+                metric_info = PLAYER_METRICS[rolling_metric]
+
+                # Use weekly trend data (already loaded)
+                if "db_trends" not in st.session_state:
+                    _td = fetch_weekly_trends([p["name"] for p in fn_players])
+                    st.session_state.db_trends = _td if _td else {}
+
+                trends = st.session_state.db_trends
+                player_weeks = trends.get(rolling_player, [])
+
+                if not player_weeks:
+                    st.caption("No weekly trend data available for this player.")
+                    return
+
+                dates = [w["week_end"] for w in player_weeks]
+                if metric_info.get("cumulative"):
+                    values = []
+                    running = 0
+                    for w in player_weeks:
+                        running += w.get(metric_info["key"], 0) or 0
+                        values.append(running)
+                else:
+                    values = [w.get(metric_info["key"], 0) or 0 for w in player_weeks]
+
+                display_name = all_fn[rolling_player]["account"]["name"]
+                avg_val = sum(values) / len(values) if values else 0
+
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(
+                    x=dates, y=values,
+                    mode="lines+markers",
+                    line=dict(color="#e94560", width=3, shape="spline", smoothing=0.8),
+                    marker=dict(size=6),
+                    name=display_name,
+                    hovertemplate="%{x|%b %d}<br>" + rolling_metric + ": %{y}<extra></extra>",
+                ))
+                if not metric_info.get("cumulative"):
+                    fig.add_trace(go.Scatter(
+                        x=[dates[0], dates[-1]], y=[avg_val, avg_val],
+                        mode="lines",
+                        line=dict(color="rgba(168,168,179,0.4)", width=1, dash="dot"),
+                        name=f"Avg: {metric_info['fmt'](avg_val)}",
+                        hoverinfo="skip",
+                    ))
+
+                fig.update_layout(
+                    title=f"{display_name} - {rolling_metric} (12 Weeks)",
+                    template="plotly_dark",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    height=350,
+                    yaxis_title=metric_info["axis"],
+                    font=dict(family="JetBrains Mono, monospace", color="white"),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10)),
+                    margin=dict(t=60, b=40),
+                    xaxis=dict(tickformat="%b %d"),
+                )
+                st.plotly_chart(fig, width="stretch")
+
+            render_player_trend()
 
             # Percentile Rankings (click to expand per player)
             st.markdown("---")
@@ -602,11 +834,12 @@ with fn_tab:
                     </div>"""
 
                 st.html(f"""
-                <div style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);border-radius:12px;padding:clamp(10px,3vw,16px);border:1px solid #e94560;">
+                <style>@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&display=swap');</style>
+                <div style="font-family:'JetBrains Mono',monospace;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);border-radius:12px;padding:clamp(10px,3vw,16px);border:1px solid #e94560;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                        <span style="color:#a8a8b3;font-size:0.7em;text-transform:uppercase;letter-spacing:1px;">POOR</span>
-                        <span style="color:#a8a8b3;font-size:0.7em;text-transform:uppercase;letter-spacing:1px;">AVERAGE</span>
-                        <span style="color:#a8a8b3;font-size:0.7em;text-transform:uppercase;letter-spacing:1px;">GREAT</span>
+                        <span style="color:#a8a8b3;font-size:0.7em;text-transform:uppercase;letter-spacing:0.5px;">POOR</span>
+                        <span style="color:#a8a8b3;font-size:0.7em;text-transform:uppercase;letter-spacing:0.5px;">AVERAGE</span>
+                        <span style="color:#a8a8b3;font-size:0.7em;text-transform:uppercase;letter-spacing:0.5px;">GREAT</span>
                     </div>
                     {bars_html}
                     <div style="margin-top:8px;font-size:0.65em;color:#666;">Estimated percentiles based on community benchmarks. Not official Epic data.</div>
@@ -622,13 +855,13 @@ with fn_tab:
                 kds = [player_mode(n).get("kd", 0) or 0 for n in names]
                 colors = ["#e94560" if v == max(kds) else "#16213e" for v in kds]
                 fig = go.Figure(go.Bar(x=display_names, y=kds, marker_color=colors, text=[f"{v:.2f}" for v in kds], textposition="outside"))
-                fig.update_layout(title="K/D Ratio", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="K/D", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
+                fig.update_layout(title="K/D Ratio", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="K/D", height=350, font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80))
                 st.plotly_chart(fig, width="stretch")
             with c2:
                 wrs = [player_mode(n).get("winRate", 0) or 0 for n in names]
                 colors = ["#e94560" if v == max(wrs) else "#16213e" for v in wrs]
                 fig = go.Figure(go.Bar(x=display_names, y=wrs, marker_color=colors, text=[f"{v:.1f}%" for v in wrs], textposition="outside"))
-                fig.update_layout(title="Win Rate", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Win %", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
+                fig.update_layout(title="Win Rate", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Win %", height=350, font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80))
                 st.plotly_chart(fig, width="stretch")
 
             c3, c4 = st.columns(2)
@@ -636,13 +869,13 @@ with fn_tab:
                 kpms = [player_mode(n).get("killsPerMatch", 0) or 0 for n in names]
                 colors = ["#e94560" if v == max(kpms) else "#16213e" for v in kpms]
                 fig = go.Figure(go.Bar(x=display_names, y=kpms, marker_color=colors, text=[f"{v:.2f}" for v in kpms], textposition="outside"))
-                fig.update_layout(title="Kills / Match", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Kills", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
+                fig.update_layout(title="Kills / Match", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Kills", height=350, font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80))
                 st.plotly_chart(fig, width="stretch")
             with c4:
                 spms = [player_mode(n).get("scorePerMatch", 0) or 0 for n in names]
                 colors = ["#e94560" if v == max(spms) else "#16213e" for v in spms]
                 fig = go.Figure(go.Bar(x=display_names, y=spms, marker_color=colors, text=[f"{v:.0f}" for v in spms], textposition="outside"))
-                fig.update_layout(title="Score / Match", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Score", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
+                fig.update_layout(title="Score / Match", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", yaxis_title="Score", height=350, font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80))
                 st.plotly_chart(fig, width="stretch")
 
             # Radar - normalize each stat to 0-100 across squad
@@ -676,7 +909,7 @@ with fn_tab:
                     theta=categories, fill="toself", name=all_fn[name]["account"]["name"], opacity=0.6,
                 ))
             fig.update_layout(polar=dict(bgcolor="rgba(0,0,0,0)", radialaxis=dict(visible=True, range=[0, 105], color="#a8a8b3", showticklabels=False), angularaxis=dict(color="#a8a8b3")),
-                              template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=420, font=dict(color="white"))
+                              template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=420, font=dict(family="JetBrains Mono, monospace", color="white"))
             st.plotly_chart(fig, width="stretch")
 
             # Game Mode Breakdown
@@ -793,13 +1026,38 @@ with fn_tab:
                             if display in PLAYER_NOTES:
                                 player_notes.append(f"- {display}: {PLAYER_NOTES[display]}")
                         notes_block = "\n".join(player_notes) if player_notes else ""
-                        cache_key = f"ai_summary_{hash(stats_block + wow_block + dub_block)}"
+                        # Rotating styles and structures for variety
+                        SUMMARY_VOICES = [
+                            "Write like a late-night sports talk radio host who's way too invested in Fortnite stats.",
+                            "Write like a sarcastic group chat friend who's been watching everyone's stats all week.",
+                            "Write like a disappointed but loving coach giving a halftime speech.",
+                            "Write like an overhyped esports commentator doing a post-match breakdown.",
+                            "Write like a sports columnist filing a deadline piece for the local paper.",
+                            "Write like someone giving a best man speech but about Fortnite stats instead of a wedding.",
+                            "Write like a detective filing a case report on this week's Fortnite crimes.",
+                            "Write like a nature documentary narrator observing the squad in their natural habitat.",
+                            "Write like a weatherman but the forecast is Fortnite performance.",
+                            "Write like a brutally honest fantasy football analyst evaluating roster moves.",
+                            "Write like a drill sergeant reviewing troop performance after training exercises.",
+                            "Write like a Yelp reviewer rating each player's week like a restaurant visit.",
+                        ]
+                        SUMMARY_STRUCTURES = [
+                            "1. Crown the MVP with receipts (specific stats)\n2. WoW trends - rises, falls, ghosts\n3. Dub Score audit - who's coasting?\n4. Superlatives - most kills, best K/D, grindiest, most improved\n5. Roasts and shoutouts\n6. Next week's challenge",
+                            "1. Power rankings - rank every active player this week, 1 sentence each\n2. Biggest glow-up and biggest fall-off (WoW comparison)\n3. Dub Score spotlight - highest and lowest\n4. The Grind Report - who put in hours, who ghosted\n5. Personalized callouts for each player\n6. Throw down a squad challenge",
+                            "1. Headlines - 3 one-liner headlines summarizing the week\n2. Player of the Week breakdown with stats\n3. WoW movers - who trended up, who fell off\n4. Stat superlatives with commentary\n5. The Roast Corner - pick 2-3 players to flame\n6. Dub Score predictions for next week",
+                            "1. Opening hot take that's slightly controversial\n2. MVP case - make the argument with numbers\n3. The Good, The Bad, The Missing (WoW context)\n4. Dub Score report card\n5. Award show - hand out 3-4 funny custom awards\n6. Closing challenge or dare",
+                        ]
+
+                        voice = random.choice(SUMMARY_VOICES)
+                        structure = random.choice(SUMMARY_STRUCTURES)
 
                         col_btn, _ = st.columns([1, 2])
                         with col_btn:
                             generate_clicked = st.button("Generate AI Summary", key="ai_summary_btn", type="primary", width="stretch")
 
-                        if generate_clicked and cache_key not in st.session_state:
+                        if generate_clicked:
+                            # Always generate fresh on click (no caching)
+                            st.session_state["ai_summary_result"] = None
                             with st.spinner("Generating weekly summary..."):
                                 try:
                                     client = anthropic.Anthropic(api_key=_anthropic_key)
@@ -809,6 +1067,8 @@ with fn_tab:
                                         messages=[{
                                             "role": "user",
                                             "content": f"""You are a Fortnite squad analyst writing a fun weekly recap for a friend group.
+
+VOICE/STYLE FOR THIS WEEK: {voice}
 
 THIS WEEK'S STATS (last 7 days only):
 {stats_block}
@@ -821,19 +1081,17 @@ WEEK-OVER-WEEK CHANGES:
 
 {f"PLAYER NOTES:{chr(10)}{notes_block}" if notes_block else ""}
 
-Write a weekly summary (200-250 words) covering:
-1. MVP of the Week - best overall performance with specific numbers from this week
-2. Week-over-Week trends - who improved, who slipped, who went MIA. When citing a delta (e.g. "K/D down 0.88"), always say "week over week" so the reader knows it's a comparison.
-3. Dub Score check - call out low Dub Scores and challenge those players to improve
-4. Superlatives - most kills, best K/D, highest win rate, most improved, grindiest (most matches/hours). Double-check your claims against the numbers - don't say someone leads a stat if they don't.
-5. Roasts and shoutouts - playful and specific. Low K/D? More deaths than kills? Barely played? Call it out.
-6. Challenge for next week - specific and fun
+Write a weekly summary (200-250 words) using this structure:
+{structure}
 
 Writing rules:
 - ONLY reference the 7-day stats provided. Never mention lifetime, career, or all-time numbers.
 - Use display names exactly as shown.
 - Follow ALL instructions in PLAYER NOTES (pronouns, roast targets, etc.).
-- Write like a real person in a group chat. No corporate voice, no "let's delve into", no "it's worth noting".
+- Lean hard into the VOICE/STYLE. Make it feel genuinely different from a generic recap.
+- When citing a WoW delta (e.g. "K/D down 0.88"), say "week over week" so the reader knows it's a comparison.
+- Double-check superlative claims against the numbers. Don't say someone leads a stat if they don't.
+- No corporate voice, no "let's delve into", no "it's worth noting".
 - No em dashes. Use commas, periods, or hyphens instead.
 - No emojis.
 - Don't oversell or inflate. "Solid K/D" not "absolutely bonkers insane K/D".
@@ -843,21 +1101,23 @@ Writing rules:
 - NEVER suggest anyone should play less or take a break. More time playing is always good. Encourage grinding."""
                                         }]
                                     )
-                                    st.session_state[cache_key] = resp.content[0].text
+                                    st.session_state["ai_summary_result"] = resp.content[0].text
                                 except Exception as e:
-                                    st.session_state[cache_key] = f"Could not generate summary: {e}"
+                                    st.session_state["ai_summary_result"] = f"Could not generate summary: {e}"
 
-                        if cache_key in st.session_state:
-                            st.markdown(st.session_state[cache_key])
+                        if st.session_state.get("ai_summary_result"):
+                            st.markdown(f'<div class="prose-section">\n\n{st.session_state["ai_summary_result"]}\n\n</div>', unsafe_allow_html=True)
                     else:
                         st.caption("No 7-day data available. Players need recent matches for the AI summary.")
 
             # Data Definitions
             st.markdown("---")
             with st.expander("Data Definitions"):
+                st.markdown('<div class="prose-section">', unsafe_allow_html=True)
                 st.markdown("""
 | Stat | Definition |
 |------|-----------|
+| **Dub Score** | Composite 0-100 performance rating. Formula: 45% Win Rate + 30% K/D + 25% Outlived/Match, each mapped to a percentile curve, then scaled by an activity multiplier (more matches = higher confidence). |
 | **K/D** | Kill/Death ratio. Kills divided by deaths (deaths = matches minus wins). |
 | **Win Rate** | Percentage of matches won. |
 | **Kills/Match** | Average kills per match played. |
@@ -880,72 +1140,96 @@ Writing rules:
 
 **Input Types:** KB/Mouse, Gamepad (controller), Touch (mobile). Stats are tracked separately by Epic per input device.
 """)
+                st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# OVERWATCH 2 TAB
+# OVERWATCH 2
 # ═══════════════════════════════════════════════════════════════════════════
-with ow2_tab:
+elif active_game == "Overwatch 2":
     ow2_players = st.session_state.squad.get("ow2_players", [])
 
     if not ow2_players:
-        st.info("Add OW2 players in the sidebar (switch to Overwatch 2 first).")
+        st.info("Add OW2 players in the sidebar.")
     else:
-        if st.button("Refresh Stats", key="ow2_refresh", width="stretch"):
+        _, col_refresh, _ = st.columns([2, 1, 2])
+        if col_refresh.button("Refresh", key="ow2_refresh", icon="🔄", width="stretch"):
+            st.session_state.pop("db_ow2_cache", None)
             st.session_state.ow2_cache = {}
 
-        all_ow2 = {}
-        for p in ow2_players:
-            cache_key = p["name"]
-            if cache_key in st.session_state.ow2_cache:
-                all_ow2[p["name"]] = st.session_state.ow2_cache[cache_key]
-            else:
-                with st.spinner(f"Searching for {p['name']}... (OW2 API can be slow)"):
-                    # Use cached player_id if we have it
-                    pid = p.get("player_id")
-                    if not pid:
-                        search = search_ow2_player(p["name"])
-                        if search:
-                            pid = search["player_id"]
-                            p["player_id"] = pid
-                            save_squad(st.session_state.squad)
-                        else:
-                            st.error(f"Could not find **{p['name']}** on OW2. Make sure profile is public and name is exact.")
-                            continue
+        # Load OW2 stats from MotherDuck (populated by daily snapshot)
+        if "db_ow2_cache" not in st.session_state:
+            with st.spinner("Loading stats..."):
+                _ow2c = fetch_ow2_cache([p["name"] for p in ow2_players])
+                st.session_state.db_ow2_cache = _ow2c if _ow2c else {}
 
-                with st.spinner(f"Loading {p['name']} stats..."):
-                    data = fetch_ow2_stats(pid)
-                    if data:
-                        all_ow2[p["name"]] = data
-                        st.session_state.ow2_cache[cache_key] = data
-                    else:
-                        st.error(f"Could not load stats for **{p['name']}**. Profile may be private.")
+        db_ow2 = st.session_state.db_ow2_cache
+        all_ow2 = {}
+        _ow2_needs_live = []
+        for p in ow2_players:
+            name = p["name"]
+            if name in db_ow2:
+                all_ow2[name] = db_ow2[name]
+            else:
+                _ow2_needs_live.append(p)
+
+        # Fallback: live API for players not in DB
+        for p in _ow2_needs_live:
+            name = p["name"]
+            if name in st.session_state.ow2_cache:
+                all_ow2[name] = st.session_state.ow2_cache[name]
+                continue
+            pid = p.get("player_id")
+            if not pid:
+                search = search_ow2_player(name)
+                if search:
+                    pid = search["player_id"]
+                    p["player_id"] = pid
+                    _save_and_sync(st.session_state.squad)
+                else:
+                    continue
+            with st.spinner(f"Loading {name} stats..."):
+                data = fetch_ow2_stats(pid)
+                if data:
+                    all_ow2[name] = data
+                    st.session_state.ow2_cache[name] = data
+
+        if not all_ow2:
+            st.info("No OW2 stats available yet. Stats refresh daily at 7am ET, or players may have private profiles.")
 
         if all_ow2:
-            # Rankings
-            kda_vals = {n: d.get("stats", {}).get("general", {}).get("kda", 0) for n, d in all_ow2.items()}
-            wr_vals = {n: d.get("stats", {}).get("general", {}).get("winrate", 0) for n, d in all_ow2.items()}
-            best_kda = max(kda_vals.values()) if kda_vals else 0
-            best_wr = max(wr_vals.values()) if wr_vals else 0
-
-            # Supreme Leader - best composite (KDA rank + Win Rate rank)
-            ow2_composite = {}
+            # Dub Scores for all players
+            ow2_dub_scores = {}
             for n, d in all_ow2.items():
                 g = d.get("stats", {}).get("general", {})
-                k = g.get("kda", 0) or 0
-                w = g.get("winrate", 0) or 0
-                ow2_composite[n] = k * 10 + w  # weight KDA heavily
-            ow2_supreme = max(ow2_composite, key=ow2_composite.get) if ow2_composite and max(ow2_composite.values()) > 0 else None
+                ow2_dub_scores[n] = ow2_perf_score(g)
+
+            # Rankings - BEST badges
+            active_ow2 = {n: d for n, d in all_ow2.items() if (d.get("stats", {}).get("general", {}).get("games_played", 0) or 0) > 0}
+            kda_vals = {n: d.get("stats", {}).get("general", {}).get("kda", 0) or 0 for n, d in active_ow2.items()}
+            wins_vals = {n: d.get("stats", {}).get("general", {}).get("games_won", 0) or 0 for n, d in active_ow2.items()}
+            elims_vals = {n: d.get("stats", {}).get("general", {}).get("average", {}).get("eliminations", 0) or 0 for n, d in active_ow2.items()}
+            dmg_vals = {n: d.get("stats", {}).get("general", {}).get("average", {}).get("damage", 0) or 0 for n, d in active_ow2.items()}
+            best_kda = max(kda_vals.values()) if kda_vals else 0
+            best_wins = max(wins_vals.values()) if wins_vals else 0
+            best_elims = max(elims_vals.values()) if elims_vals else 0
+            best_dmg = max(dmg_vals.values()) if dmg_vals else 0
+
+            # Supreme Leader - highest Dub Score
+            ow2_supreme = max(ow2_dub_scores, key=lambda n: ow2_dub_scores[n] or 0) if ow2_dub_scores and any(v for v in ow2_dub_scores.values() if v) else None
+
+            # Sort cards by Dub Score (Supreme Leader first)
+            ow2_card_order = sorted(all_ow2.keys(), key=lambda n: ow2_dub_scores.get(n) or 0, reverse=True)
 
             # Battle Cards
             st.markdown("## Battle Cards")
             ow2_cards_html = []
 
-            for idx, (name, data) in enumerate(all_ow2.items()):
+            for name in ow2_card_order:
+                data = all_ow2[name]
                 summary = data.get("summary", {})
                 stats = data.get("stats", {})
                 general = stats.get("general", {})
-                roles = stats.get("roles", {})
 
                 username = summary.get("username", name)
                 title = summary.get("title", "")
@@ -973,49 +1257,55 @@ with ow2_tab:
                                 rank_text = f"{role_label}: {div} {tier}"
                                 rank_icon = rk_icon
 
-                games = general.get("games_played", 0)
-                wins = general.get("games_won", 0)
-                losses = general.get("games_lost", 0)
-                winrate = general.get("winrate", 0)
-                kda = general.get("kda", 0)
+                games = general.get("games_played", 0) or 0
+                wins = general.get("games_won", 0) or 0
+                losses = general.get("games_lost", 0) or 0
+                winrate = general.get("winrate", 0) or 0
+                kda = general.get("kda", 0) or 0
                 total = general.get("total", {})
                 avg = general.get("average", {})
-                hours = round(general.get("time_played", 0) / 3600, 1)
+                hours = round((general.get("time_played", 0) or 0) / 3600, 1)
 
-                kda_badge = ' <span class="rank-badge">SQUAD BEST</span>' if kda == best_kda and len(all_ow2) > 1 else ""
-                wr_badge = ' <span class="rank-badge">SQUAD BEST</span>' if winrate == best_wr and len(all_ow2) > 1 else ""
+                is_active = name in active_ow2
+                kda_badge = ' <span class="rank-badge">BEST</span>' if is_active and kda == best_kda and len(all_ow2) > 1 and kda > 0 else ""
+                wins_badge = ' <span class="rank-badge">BEST</span>' if is_active and wins == best_wins and len(all_ow2) > 1 and wins > 0 else ""
+                elims_badge = ' <span class="rank-badge">BEST</span>' if is_active and (avg.get("eliminations", 0) or 0) == best_elims and len(all_ow2) > 1 and best_elims > 0 else ""
+                dmg_badge = ' <span class="rank-badge">BEST</span>' if is_active and (avg.get("damage", 0) or 0) == best_dmg and len(all_ow2) > 1 and best_dmg > 0 else ""
 
                 avatar_html = f'<img class="player-avatar" src="{avatar}" /><br>' if avatar else ""
                 rank_icon_html = f'<img class="rank-icon" src="{rank_icon}" />' if rank_icon else ""
 
-                ow2_supreme_badge = ' <span style="display:inline-block;background:linear-gradient(90deg,#ffd700,#ffaa00);color:#1a1a2e;padding:2px 8px;border-radius:12px;font-size:0.55em;font-weight:800;margin-left:6px;letter-spacing:0.5px;vertical-align:middle;">SUPREME LEADER</span>' if name == ow2_supreme and len(all_ow2) > 1 else ""
+                is_supreme = name == ow2_supreme and len(all_ow2) > 1
+
+                dub_score = ow2_dub_scores.get(name)
+                circle_html = score_circle_html(dub_score, "Dub Score")
 
                 ow2_cards_html.append(f"""
-                <div class="battle-card" style="{'border-color:#ffd700;box-shadow:0 0 12px rgba(255,215,0,0.3);' if name == ow2_supreme and len(all_ow2) > 1 else ''}">
+                <div class="battle-card" style="{'border-color:#ffd700;box-shadow:0 0 12px rgba(255,215,0,0.3);' if is_supreme else ''}">
                     {avatar_html}
-                    <div class="player-name">{username}{ow2_supreme_badge}</div>
+                    <div class="player-name" style="display:flex;align-items:center;flex-wrap:nowrap;">{username}{'<span style="background:linear-gradient(90deg,#ffd700,#ffaa00);color:#1a1a2e;padding:1px 6px;border-radius:8px;font-size:0.45em;font-weight:800;margin-left:6px;letter-spacing:0.5px;white-space:nowrap;">SUPREME LEADER</span>' if is_supreme else ''}</div>
                     <div class="player-platform">{title} | Endorsement {endorsement}</div>
                     <div class="player-platform">{rank_icon_html} {rank_text}</div>
-
+                    <div style="display: flex; justify-content: center; gap: 16px; margin-bottom: 12px;">
+                        {circle_html}
+                    </div>
                     <div style="display: flex; justify-content: space-around; margin-bottom: 16px;">
                         <div class="big-stat"><div class="big-stat-value">{kda:.2f}</div><div class="big-stat-label">KDA</div></div>
-                        <div class="big-stat"><div class="big-stat-value">{winrate:.1f}%</div><div class="big-stat-label">Win Rate</div></div>
-                        <div class="big-stat"><div class="big-stat-value">{wins:,}</div><div class="big-stat-label">Wins</div></div>
+                        <div class="big-stat"><div class="big-stat-value">{wins:,}<span style="font-size:0.4em;color:rgba(249,158,26,0.5);font-weight:600;margin-left:4px;">{winrate:.1f}%</span></div><div class="big-stat-label">Dubs</div></div>
+                        <div class="big-stat"><div class="big-stat-value">{avg.get('eliminations', 0):.1f}</div><div class="big-stat-label">Avg Elims</div></div>
                     </div>
-
                     <div class="stat-row"><span class="stat-label">Games Played</span><span class="stat-value">{games:,}</span></div>
-                    <div class="stat-row"><span class="stat-label">W / L</span><span class="stat-value">{wins:,} / {losses:,}</span></div>
+                    <div class="stat-row"><span class="stat-label">Dubs</span><span class="stat-highlight">{wins:,} <span style="font-size:0.8em;color:rgba(249,158,26,0.45);">{winrate:.1f}%</span>{wins_badge}</span></div>
                     <div class="stat-row"><span class="stat-label">KDA</span><span class="stat-highlight">{kda:.2f}{kda_badge}</span></div>
-                    <div class="stat-row"><span class="stat-label">Win Rate</span><span class="stat-highlight">{winrate:.1f}%{wr_badge}</span></div>
                     <div class="stat-row"><span class="stat-label">Eliminations</span><span class="stat-value">{total.get('eliminations', 0):,}</span></div>
                     <div class="stat-row"><span class="stat-label">Assists</span><span class="stat-value">{total.get('assists', 0):,}</span></div>
                     <div class="stat-row"><span class="stat-label">Deaths</span><span class="stat-value">{total.get('deaths', 0):,}</span></div>
-                    <div class="stat-row"><span class="stat-label">Damage Done</span><span class="stat-value">{total.get('damage', 0):,}</span></div>
-                    <div class="stat-row"><span class="stat-label">Healing Done</span><span class="stat-value">{total.get('healing', 0):,}</span></div>
-                    <div class="stat-row"><span class="stat-label">Avg Elims/Game</span><span class="stat-value">{avg.get('eliminations', 0):.1f}</span></div>
-                    <div class="stat-row"><span class="stat-label">Avg Assists/Game</span><span class="stat-value">{avg.get('assists', 0):.1f}</span></div>
-                    <div class="stat-row"><span class="stat-label">Avg Dmg/Game</span><span class="stat-value">{avg.get('damage', 0):,.0f}</span></div>
-                    <div class="stat-row"><span class="stat-label">Avg Healing/Game</span><span class="stat-value">{avg.get('healing', 0):,.0f}</span></div>
+                    <div class="stat-row"><span class="stat-label">Avg Elims</span><span class="stat-highlight">{avg.get('eliminations', 0):.1f}{elims_badge}</span></div>
+                    <div class="stat-row"><span class="stat-label">Avg Dmg</span><span class="stat-highlight">{avg.get('damage', 0):,.0f}{dmg_badge}</span></div>
+                    <div class="stat-row"><span class="stat-label">Avg Healing</span><span class="stat-value">{avg.get('healing', 0):,.0f}</span></div>
+                    <div class="stat-row"><span class="stat-label">Avg Assists</span><span class="stat-value">{avg.get('assists', 0):.1f}</span></div>
+                    <div class="stat-row"><span class="stat-label">Total Damage</span><span class="stat-value">{total.get('damage', 0):,}</span></div>
+                    <div class="stat-row"><span class="stat-label">Total Healing</span><span class="stat-value">{total.get('healing', 0):,}</span></div>
                     <div class="stat-row"><span class="stat-label">Hours Played</span><span class="stat-value">{hours:,.1f}</span></div>
                 </div>""")
 
@@ -1036,13 +1326,13 @@ with ow2_tab:
                 kdas = [all_ow2[n].get("stats", {}).get("general", {}).get("kda", 0) for n in ow2_names]
                 colors = ["#f99e1a" if v == max(kdas) else "#16213e" for v in kdas]
                 fig = go.Figure(go.Bar(x=ow2_display, y=kdas, marker_color=colors, text=[f"{v:.2f}" for v in kdas], textposition="outside"))
-                fig.update_layout(title="KDA", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
+                fig.update_layout(title="KDA", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80))
                 st.plotly_chart(fig, width="stretch")
             with c2:
                 wrs = [all_ow2[n].get("stats", {}).get("general", {}).get("winrate", 0) for n in ow2_names]
                 colors = ["#f99e1a" if v == max(wrs) else "#16213e" for v in wrs]
                 fig = go.Figure(go.Bar(x=ow2_display, y=wrs, marker_color=colors, text=[f"{v:.1f}%" for v in wrs], textposition="outside"))
-                fig.update_layout(title="Win Rate", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
+                fig.update_layout(title="Win Rate", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80))
                 st.plotly_chart(fig, width="stretch")
 
             c3, c4 = st.columns(2)
@@ -1050,13 +1340,13 @@ with ow2_tab:
                 dmgs = [all_ow2[n].get("stats", {}).get("general", {}).get("average", {}).get("damage", 0) for n in ow2_names]
                 colors = ["#f99e1a" if v == max(dmgs) else "#16213e" for v in dmgs]
                 fig = go.Figure(go.Bar(x=ow2_display, y=dmgs, marker_color=colors, text=[f"{v:,.0f}" for v in dmgs], textposition="outside"))
-                fig.update_layout(title="Avg Damage / Game", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
+                fig.update_layout(title="Avg Damage / Game", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80))
                 st.plotly_chart(fig, width="stretch")
             with c4:
                 heals = [all_ow2[n].get("stats", {}).get("general", {}).get("average", {}).get("healing", 0) for n in ow2_names]
                 colors = ["#f99e1a" if v == max(heals) else "#16213e" for v in heals]
                 fig = go.Figure(go.Bar(x=ow2_display, y=heals, marker_color=colors, text=[f"{v:,.0f}" for v in heals], textposition="outside"))
-                fig.update_layout(title="Avg Healing / Game", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
+                fig.update_layout(title="Avg Healing / Game", template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80))
                 st.plotly_chart(fig, width="stretch")
 
             # Radar - normalize each stat to 0-100 across squad
@@ -1083,7 +1373,7 @@ with ow2_tab:
                     theta=categories, fill="toself", name=all_ow2[n].get("summary", {}).get("username", n), opacity=0.6,
                 ))
             fig.update_layout(polar=dict(bgcolor="rgba(0,0,0,0)", radialaxis=dict(visible=True, range=[0, 105], color="#a8a8b3", showticklabels=False), angularaxis=dict(color="#a8a8b3")),
-                              template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=420, font=dict(color="white"))
+                              template="plotly_dark", plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=420, font=dict(family="JetBrains Mono, monospace", color="white"))
             st.plotly_chart(fig, width="stretch")
 
             # Role breakdown table
@@ -1101,18 +1391,17 @@ with ow2_tab:
                     continue
                 a = g.get("average", {})
                 t = g.get("total", {})
+                _wins = g.get('games_won', 0) or 0
+                _wr = g.get('winrate', 0) or 0
                 table_data.append({
                     "Player": all_ow2[n].get("summary", {}).get("username", n),
                     "Games": f"{g.get('games_played', 0):,}",
-                    "Win%": f"{g.get('winrate', 0):.1f}%",
+                    "Dubs": f"{_wins:,} ({_wr:.1f}%)",
                     "KDA": f"{g.get('kda', 0):.2f}",
                     "Elims": f"{t.get('eliminations', 0):,}",
                     "Assists": f"{t.get('assists', 0):,}",
                     "Deaths": f"{t.get('deaths', 0):,}",
-                    "Dmg": f"{t.get('damage', 0):,}",
-                    "Healing": f"{t.get('healing', 0):,}",
                     "Avg Elims": f"{a.get('eliminations', 0):.1f}",
-                    "Avg Assists": f"{a.get('assists', 0):.1f}",
                     "Avg Dmg": f"{a.get('damage', 0):,.0f}",
                     "Avg Healing": f"{a.get('healing', 0):,.0f}",
                     "Hours": f"{round(g.get('time_played', 0) / 3600, 1):,.1f}",
@@ -1153,17 +1442,149 @@ with ow2_tab:
                     fig.add_trace(go.Bar(name="Avg Elims", x=[h["Hero"] for h in top5], y=[h["Avg Elims"] for h in top5], marker_color="#f99e1a"))
                     fig.add_trace(go.Bar(name="KDA", x=[h["Hero"] for h in top5], y=[h["KDA"] for h in top5], marker_color="#e94560"))
                     fig.update_layout(title=f"{hero_player}'s Top 5 Heroes", barmode="group", template="plotly_dark",
-                                      plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(color="white"), xaxis_tickangle=-45, margin=dict(b=80))
+                                      plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)", height=350, font=dict(family="JetBrains Mono, monospace", color="white"), xaxis_tickangle=-45, margin=dict(b=80))
                     st.plotly_chart(fig, width="stretch")
             else:
                 st.caption("No hero data available for this player.")
 
+            # OW2 AI Summary
+            st.markdown("---")
+            st.markdown("## AI Weekly Recap")
+            if _anthropic_key and len(all_ow2) >= 2:
+                # Build stats context from OW2 data
+                ow2_summary_lines = []
+                ow2_dub_lines = []
+                for n in ow2_names:
+                    d = all_ow2[n]
+                    disp = d.get("summary", {}).get("username", n)
+                    g = d.get("stats", {}).get("general", {})
+                    if not g or not g.get("games_played"):
+                        continue
+                    avg = g.get("average", {})
+                    tot = g.get("total", {})
+                    ow2_summary_lines.append(
+                        f"{disp}: {g.get('games_played',0):,} games, "
+                        f"KDA {g.get('kda',0):.2f}, Win% {g.get('winrate',0):.1f}%, "
+                        f"Avg Elims {avg.get('eliminations',0):.1f}, "
+                        f"Avg Dmg {avg.get('damage',0):,.0f}, "
+                        f"Avg Healing {avg.get('healing',0):,.0f}, "
+                        f"Total Elims {tot.get('eliminations',0):,}, "
+                        f"Total Deaths {tot.get('deaths',0):,}"
+                    )
+                    from metrics import ow2_perf_score
+                    ds = ow2_perf_score(g)
+                    if ds is not None:
+                        ow2_dub_lines.append(f"{disp}: {ds}/100")
+
+                if ow2_summary_lines:
+                    ow2_stats_block = "\n".join(ow2_summary_lines)
+                    ow2_dub_block = "\n".join(ow2_dub_lines) if ow2_dub_lines else "No Dub Scores available."
+
+                    # OW2-specific player notes (display names differ from Fortnite)
+                    OW2_PLAYER_NOTES = {
+                        "GasCan": "she/her pronouns",
+                        "i7vosunz458": "he/him. Always tease or roast this player. Find something to rib him about no matter how well he played - low win rate, dying too much, bad hero picks, whatever you can find. Make it funny. Also always subtly hint that he needs to put in more time and grind harder.",
+                    }
+                    ow2_player_notes = []
+                    for n in ow2_names:
+                        disp = all_ow2[n].get("summary", {}).get("username", n)
+                        # Check both exact and case-insensitive matches
+                        note = OW2_PLAYER_NOTES.get(disp) or OW2_PLAYER_NOTES.get(disp.lower()) or OW2_PLAYER_NOTES.get(n)
+                        if note:
+                            ow2_player_notes.append(f"- {disp}: {note}")
+                    ow2_notes_block = "\n".join(ow2_player_notes) if ow2_player_notes else ""
+
+                    OW2_VOICES = [
+                        "Write like a late-night esports desk analyst who takes Overwatch way too seriously.",
+                        "Write like a sarcastic group chat friend who's been spectating everyone's OW2 games all week.",
+                        "Write like a disappointed but loving coach reviewing VODs after a losing streak.",
+                        "Write like an overhyped OWL commentator doing a post-match breakdown.",
+                        "Write like someone giving a best man speech but about Overwatch stats instead of a wedding.",
+                        "Write like a detective investigating why the team keeps losing fights.",
+                        "Write like a nature documentary narrator observing the squad's competitive habits.",
+                        "Write like a brutally honest fantasy esports analyst evaluating roster moves.",
+                        "Write like a drill sergeant reviewing troop performance after scrims.",
+                        "Write like a Yelp reviewer rating each player's performance like a restaurant visit.",
+                        "Write like a sports radio caller who's furious about tank play and won't stop talking about it.",
+                        "Write like a patch notes writer but instead of hero changes, it's player performance updates.",
+                    ]
+                    OW2_STRUCTURES = [
+                        "1. Crown the MVP with receipts (specific stats)\n2. Role check - best tank, damage, support player\n3. Dub Score audit - who's carrying, who's coasting?\n4. Superlatives - most elims, best KDA, most heals, highest damage\n5. Roasts and shoutouts\n6. Next week's challenge",
+                        "1. Power rankings - rank every player, 1 sentence each\n2. Biggest carry and biggest liability\n3. Dub Score spotlight - highest and lowest\n4. The Grind Report - who put in hours, who ghosted\n5. Personalized callouts for each player\n6. Throw down a squad challenge",
+                        "1. Headlines - 3 one-liner headlines summarizing the squad\n2. Player of the Week breakdown with stats\n3. Role report card - tank/damage/support grades\n4. Stat superlatives with commentary\n5. The Roast Corner - pick 2-3 players to flame\n6. Hero pick predictions or recommendations",
+                        "1. Opening hot take that's slightly controversial\n2. MVP case - make the argument with numbers\n3. The Good, The Bad, The Missing\n4. Dub Score report card\n5. Award show - hand out 3-4 funny custom awards\n6. Closing challenge or dare",
+                    ]
+
+                    ow2_voice = random.choice(OW2_VOICES)
+                    ow2_structure = random.choice(OW2_STRUCTURES)
+
+                    col_btn_ow2, _ = st.columns([1, 2])
+                    with col_btn_ow2:
+                        ow2_gen_clicked = st.button("Generate AI Summary", key="ow2_ai_summary_btn", type="primary", width="stretch")
+
+                    if ow2_gen_clicked:
+                        st.session_state["ow2_ai_summary_result"] = None
+                        with st.spinner("Generating OW2 summary..."):
+                            try:
+                                client = anthropic.Anthropic(api_key=_anthropic_key)
+                                resp = client.messages.create(
+                                    model="claude-haiku-4-5-20251001",
+                                    max_tokens=800,
+                                    messages=[{
+                                        "role": "user",
+                                        "content": f"""You are an Overwatch 2 squad analyst writing a fun recap for a friend group.
+
+VOICE/STYLE FOR THIS RECAP: {ow2_voice}
+
+SQUAD STATS (career totals - OW2 does not provide weekly breakdowns):
+{ow2_stats_block}
+
+DUB SCORES (composite performance rating, 0-100 scale):
+{ow2_dub_block}
+
+{f"PLAYER NOTES:{chr(10)}{ow2_notes_block}" if ow2_notes_block else ""}
+
+Write a squad recap (200-250 words) using this structure:
+{ow2_structure}
+
+Writing rules:
+- These are career/overall stats. Do NOT frame them as "this week" or "last 7 days". Say "career", "overall", or just reference the stats directly.
+- Use display names exactly as shown.
+- Follow ALL instructions in PLAYER NOTES (pronouns, roast targets, etc.).
+- Lean hard into the VOICE/STYLE. Make it feel genuinely different from a generic recap.
+- Reference OW2-specific concepts: roles (tank/damage/support), hero picks, payload, objectives, team fights.
+- Double-check superlative claims against the numbers. Don't say someone leads a stat if they don't.
+- No corporate voice, no "let's delve into", no "it's worth noting".
+- No em dashes. Use commas, periods, or hyphens instead.
+- No emojis.
+- Don't oversell or inflate. "Solid KDA" not "absolutely bonkers insane KDA".
+- Don't use "pivotal", "landscape", "robust", "comprehensive", "witnessing", or "peak performance".
+- Don't start paragraphs with "But let's talk about" or "Here's where it gets spicy".
+- Be direct. Cut filler. If you can say it shorter, do.
+- NEVER suggest anyone should play less or take a break. More time playing is always good. Encourage grinding."""
+                                    }]
+                                )
+                                st.session_state["ow2_ai_summary_result"] = resp.content[0].text
+                            except Exception as e:
+                                st.session_state["ow2_ai_summary_result"] = f"Could not generate summary: {e}"
+
+                    if st.session_state.get("ow2_ai_summary_result"):
+                        st.markdown(f'<div class="prose-section">\n\n{st.session_state["ow2_ai_summary_result"]}\n\n</div>', unsafe_allow_html=True)
+                else:
+                    st.caption("No OW2 stats available for AI summary.")
+            elif not _anthropic_key:
+                st.caption("AI Summary requires an Anthropic API key.")
+            else:
+                st.caption("Need at least 2 players for the AI summary.")
+
             # OW2 Data Definitions
             st.markdown("---")
             with st.expander("Data Definitions"):
+                st.markdown('<div class="prose-section">', unsafe_allow_html=True)
                 st.markdown("""
 | Stat | Definition |
 |------|-----------|
+| **Dub Score** | Composite 0-100 performance rating. Formula: 40% Win Rate + 30% KDA + 15% Avg Elims + 15% Avg Damage, each mapped to a percentile curve, then scaled by an activity multiplier. |
 | **KDA** | (Eliminations + Assists) / Deaths. Measures overall combat contribution. |
 | **Win Rate** | Percentage of games won. |
 | **Eliminations** | Final blows + assists that result in a kill. |
@@ -1179,3 +1600,4 @@ with ow2_tab:
 
 **Note:** OW2 stats are career totals only. Blizzard does not provide time-windowed stats through any public API.
 """)
+                st.markdown('</div>', unsafe_allow_html=True)
