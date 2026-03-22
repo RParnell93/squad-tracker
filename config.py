@@ -96,9 +96,15 @@ CSS = """
         font-family: 'JetBrains Mono', monospace !important;
         letter-spacing: -0.5px;
     }
-    h1, .stApp h1 { font-size: 1.6em; }
-    h2, .stApp h2 { font-size: 1.25em; }
+    h1, .stApp h1 { font-size: 1.6em; margin-bottom: 0.1em; }
+    h2, .stApp h2 { font-size: 1.25em; margin-top: 0.3em; margin-bottom: 0.2em; }
     h3, .stApp h3 { font-size: 1.05em; }
+    /* Tighten vertical gaps between top-level widgets */
+    .stApp [data-testid="stMainBlockContainer"] > div > [data-testid="stVerticalBlock"] > [data-testid="element-container"] {
+        margin-bottom: -0.4rem;
+    }
+    .stApp [data-testid="stRadio"] { margin-top: -0.3rem; }
+    .stApp [data-testid="stSegmentedControl"] { margin-top: -0.3rem; }
     /* Inputs and selects */
     input, select, textarea, button,
     [data-testid="stTextInput"] input,
