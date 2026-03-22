@@ -22,7 +22,7 @@ DEFAULT_OW2_PLAYERS = [
     {"name": "GasCan", "player_id": "d55fbfa9b27fd6fcb8a220a4%7C60d238a9723f0c5c425ab4c56d4579b8"},
     {"name": "GreyBeast", "player_id": "d54ca99391749abefdbd25a7d607a5%7C2b7fa8e1b80a57998ee25a9d17f99925"},
     {"name": "i7vosunz458"},
-    {"name": "Jbone", "player_id": "junkrob-1142"},
+    {"name": "junkrob", "player_id": "junkrob-1142"},
 ]
 
 # Shared card CSS used in st.html() blocks (scoped) - parameterized by accent color
