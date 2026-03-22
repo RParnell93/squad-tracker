@@ -659,15 +659,16 @@ if active_game == "Fortnite":
                 st.caption("Source: MotherDuck")
                 week_ranges = get_all_week_ranges(12)
 
-                # Build x labels
+                # Build x labels with date ranges
                 x_labels = []
                 for i, (ws, we) in enumerate(week_ranges):
+                    date_range = f"{ws.strftime('%b %-d')}-{we.strftime('%-d')}"
                     if i == len(week_ranges) - 1:
-                        x_labels.append("Last Week")
+                        x_labels.append(f"Last Week<br><span style='font-size:0.7em;color:#6e7681;'>{date_range}</span>")
                     elif i == len(week_ranges) - 2:
-                        x_labels.append("2 Wks Ago")
+                        x_labels.append(f"2 Wks Ago<br><span style='font-size:0.7em;color:#6e7681;'>{date_range}</span>")
                     else:
-                        x_labels.append(f"Wk {i + 1}")
+                        x_labels.append(f"Wk {i + 1}<br><span style='font-size:0.7em;color:#6e7681;'>{date_range}</span>")
 
                 tmk = metric_info["key"]
                 fmt_fn = metric_info["fmt"]
