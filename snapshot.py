@@ -43,6 +43,7 @@ PLAYERS = [
     {"name": "Jbone", "epic_name": "Jbone"},
     {"name": "hailedcanvas141", "epic_name": "DANDEBORD"},
     {"name": "mrfox733", "epic_name": "mrfox733"},
+    {"name": "gascan46310", "epic_name": "Gascan46310"},
 ]
 
 
