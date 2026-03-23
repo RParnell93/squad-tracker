@@ -174,12 +174,18 @@ def fetch_week_stats(account_id, week_start, week_end):
 
     parsed = parse_raw_stats(raw)
     # Only count core BR modes (solo/duo/trio/squad) - skip LTMs, blitz, reload, etc.
+    # Also filter out Reload matches (avg match < 6 min)
     _core_modes = ["solo", "duo", "trio", "squad"]
     totals = {"kills": 0, "deaths": 0, "wins": 0, "matches": 0,
               "score": 0, "players_outlived": 0, "minutes_played": 0}
     for input_type, playlists in parsed.items():
         for playlist, metrics in playlists.items():
             if not any(mode in playlist for mode in _core_modes):
+                continue
+            # Filter out Reload/Blitz (avg match < 6 min)
+            m = metrics.get("matchesplayed", 0)
+            mins = metrics.get("minutesplayed", 0)
+            if m > 0 and mins > 0 and (mins / m) < 6:
                 continue
             totals["kills"] += metrics.get("kills", 0)
             totals["matches"] += metrics.get("matchesplayed", 0)

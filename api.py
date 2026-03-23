@@ -35,14 +35,27 @@ def fetch_fortnite_stats(name, account_type, api_key):
     return None
 
 
+def _is_reload(playlist, metrics):
+    """Detect Reload/Blitz playlists by average match length.
+
+    Standard BR matches average 8-15 min. Reload matches average 3-5 min.
+    We use a 6-minute threshold to distinguish them.
+    """
+    matches = metrics.get("matchesplayed", 0)
+    minutes = metrics.get("minutesplayed", 0)
+    if matches <= 0 or minutes <= 0:
+        return False
+    avg_min = minutes / matches
+    return avg_min < 6
+
+
 def epic_parsed_to_mode_stats(parsed):
     """Convert Epic raw parsed stats into fortnite-api.com-style mode stats.
 
     Groups playlists into solo/duo/squad/overall and sums across inputs.
-    Returns dict like: {"all": {"overall": {...}, "solo": {...}, ...}}
+    Filters out Reload/Blitz matches (avg match < 6 min) from core modes.
+    Returns dict like: {"all": {"overall": {...}, "solo": {...}, "ltm": {...}, ...}}
     """
-    # Only core BR modes - keyword substrings matched against playlist names.
-    # Playlists that don't match any mode are excluded (LTMs, blitz, reload, etc.)
     mode_map = {
         "solo": ["solo"],
         "duo": ["duo"],
@@ -51,7 +64,7 @@ def epic_parsed_to_mode_stats(parsed):
     }
 
     totals = {}  # mode -> {metric: value}
-    for mode in ["solo", "duo", "trio", "squad", "overall"]:
+    for mode in ["solo", "duo", "trio", "squad", "overall", "ltm"]:
         totals[mode] = {}
 
     for input_type, playlists in parsed.items():
@@ -64,7 +77,20 @@ def epic_parsed_to_mode_stats(parsed):
                     break
 
             if assigned is None:
-                continue  # skip LTMs, blitz, reload, etc.
+                # Unrecognized playlist -> LTM bucket
+                for metric, val in metrics.items():
+                    if metric == "lastmodified":
+                        continue
+                    totals["ltm"][metric] = totals["ltm"].get(metric, 0) + val
+                continue
+
+            # Reload/Blitz detection: short matches go to LTM bucket
+            if _is_reload(playlist, metrics):
+                for metric, val in metrics.items():
+                    if metric == "lastmodified":
+                        continue
+                    totals["ltm"][metric] = totals["ltm"].get(metric, 0) + val
+                continue
 
             # Add to the assigned mode AND overall
             for target in [assigned, "overall"]:
