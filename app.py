@@ -25,7 +25,7 @@ from metrics import (
     perf_score, ow2_perf_score, score_color, score_circle_html,
 )
 from helpers import get_fortnite_api_key, load_squad, save_squad
-from db import fetch_weekly_trends, fetch_player_cache, fetch_ow2_cache, get_all_week_ranges, HAS_DUCKDB
+from db import fetch_weekly_trends, fetch_player_cache, fetch_ow2_cache, get_all_week_ranges, get_ytd_week_ranges, HAS_DUCKDB
 
 st.set_page_config(page_title="Squad Stats", page_icon="🎮", layout="wide")
 
@@ -694,12 +694,12 @@ if active_game == "Fortnite":
                     selected_metric = _trend_opts[0]
                 metric_info = TREND_METRICS[selected_metric]
 
-                st.markdown(f"## {selected_metric} Trend (Past 12 Weeks)")
+                st.markdown(f"## {selected_metric} Trend (YTD)")
 
-                # Load from MotherDuck
+                # Load from MotherDuck - fetch enough weeks for YTD + 3 seed weeks for rolling avg
                 if "db_trends" not in st.session_state:
                     with st.spinner("Loading trend data..."):
-                        db_data = fetch_weekly_trends(list(all_fn.keys()), num_weeks=12)
+                        db_data = fetch_weekly_trends(list(all_fn.keys()), num_weeks=52)
                         st.session_state.db_trends = db_data
 
                 db_data = st.session_state.get("db_trends")
@@ -708,7 +708,8 @@ if active_game == "Fortnite":
                     return
 
                 st.caption("Source: MotherDuck")
-                week_ranges = get_all_week_ranges(12)
+                all_weeks, display_start = get_ytd_week_ranges(extra_seed_weeks=0)
+                week_ranges = all_weeks
 
                 # Build x labels with date ranges
                 x_labels = []
@@ -841,7 +842,7 @@ if active_game == "Fortnite":
                 ))
 
                 fig.update_layout(
-                    title=f"{display_name} - {rolling_metric} {'(3-Wk Rolling Avg)' if not PLAYER_METRICS[rolling_metric].get('cumulative') else '(12 Weeks)'}",
+                    title=f"{display_name} - {rolling_metric} {'(3-Wk Rolling Avg)' if not PLAYER_METRICS[rolling_metric].get('cumulative') else '(YTD)'}",
                     template="plotly_dark",
                     plot_bgcolor="rgba(0,0,0,0)",
                     paper_bgcolor="rgba(0,0,0,0)",
