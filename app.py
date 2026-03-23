@@ -238,11 +238,11 @@ with st.sidebar:
     st.markdown(f'<div class="sidebar-header"><span class="icon">{_game_icon}</span><span class="title">{_game_label} Squad</span></div>', unsafe_allow_html=True)
 
     if active_game == "Fortnite":
-        platform_map = {"Xbox": "xbl", "PlayStation": "psn", "Epic (PC)": "epic", "Nintendo Switch": "epic"}
+        platform_map = {"Xbox": "xbl", "PlayStation": "psn", "Epic (PC)": "epic", "Nintendo Switch": "epic", "Amazon Luna": "epic"}
 
         st.markdown("---")
-        _platform_colors = {"Xbox": "#2d9f2d", "PlayStation": "#006fcd", "Epic (PC)": "#6b6b7b", "Nintendo Switch": "#e4000f"}
-        _plat_short = {"Xbox": "XBOX", "PlayStation": "PSN", "Epic (PC)": "PC", "Nintendo Switch": "NSW"}
+        _platform_colors = {"Xbox": "#2d9f2d", "PlayStation": "#006fcd", "Epic (PC)": "#6b6b7b", "Nintendo Switch": "#e4000f", "Amazon Luna": "#ff9900"}
+        _plat_short = {"Xbox": "XBOX", "PlayStation": "PSN", "Epic (PC)": "PC", "Nintendo Switch": "NSW", "Amazon Luna": "LUNA"}
         fn_list = st.session_state.squad.get("fortnite_players", [])
         if fn_list:
             st.markdown(f'<div class="sidebar-section">Your Squad ({len(fn_list)})</div>', unsafe_allow_html=True)
@@ -599,8 +599,8 @@ if active_game == "Fortnite":
                 overall = player_mode(name)
                 bp = data.get("battlePass", {})
                 platform = next((p["platform"] for p in fn_players if p["name"] == name), "")
-                _plat_colors = {"Xbox": "#2d9f2d", "PlayStation": "#006fcd", "Epic (PC)": "#6b6b7b", "Nintendo Switch": "#e4000f"}
-                _plat_abbr = {"Xbox": "XBOX", "PlayStation": "PSN", "Epic (PC)": "PC"}
+                _plat_colors = {"Xbox": "#2d9f2d", "PlayStation": "#006fcd", "Epic (PC)": "#6b6b7b", "Nintendo Switch": "#e4000f", "Amazon Luna": "#ff9900"}
+                _plat_abbr = {"Xbox": "XBOX", "PlayStation": "PSN", "Epic (PC)": "PC", "Nintendo Switch": "NSW", "Amazon Luna": "LUNA"}
                 _plat_c = _plat_colors.get(platform, "#6b6b7b")
                 _plat_tag = f'<span style="background:{_plat_c};color:white;padding:2px 8px;border-radius:4px;font-size:0.7em;font-weight:700;letter-spacing:0.5px;">{_plat_abbr.get(platform, platform)}</span>'
 
