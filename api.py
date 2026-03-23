@@ -41,15 +41,13 @@ def epic_parsed_to_mode_stats(parsed):
     Groups playlists into solo/duo/squad/overall and sums across inputs.
     Returns dict like: {"all": {"overall": {...}, "solo": {...}, ...}}
     """
+    # Only core BR modes - keyword substrings matched against playlist names.
+    # Playlists that don't match any mode are excluded (LTMs, blitz, reload, etc.)
     mode_map = {
-        "solo": ["defaultsolo", "nobuildbrsolo", "nobuildbr_solo", "figmentsolo",
-                 "figmentnobuildsolo"],
-        "duo": ["defaultduo", "nobuildbrduos", "nobuildbr_duo", "figmentduo",
-                "figmentnobuildduo", "bots_nobuildbr_duo"],
-        "squad": ["defaultsquad", "nobuildbrsquad", "nobuildbr_squad", "sunflowernobuildsquad",
-                  "arseniccore_squads_maxfog", "punchberrynobuildsquad",
-                  "mash_squads_legacy", "forbiddenfruitnobuildbrsquad"],
-        "trio": ["trios", "nobuildbr_trio", "bots_nobuildbr_trio"],
+        "solo": ["solo"],
+        "duo": ["duo"],
+        "trio": ["trio"],
+        "squad": ["squad"],
     }
 
     totals = {}  # mode -> {metric: value}
@@ -59,14 +57,17 @@ def epic_parsed_to_mode_stats(parsed):
     for input_type, playlists in parsed.items():
         for playlist, metrics in playlists.items():
             # Determine which mode this playlist belongs to
-            assigned = "overall"  # everything counts toward overall
+            assigned = None
             for mode, keywords in mode_map.items():
                 if any(kw in playlist for kw in keywords):
                     assigned = mode
                     break
 
+            if assigned is None:
+                continue  # skip LTMs, blitz, reload, etc.
+
             # Add to the assigned mode AND overall
-            for target in ([assigned, "overall"] if assigned != "overall" else ["overall"]):
+            for target in [assigned, "overall"]:
                 for metric, val in metrics.items():
                     if metric == "lastmodified":
                         continue
