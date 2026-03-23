@@ -248,7 +248,7 @@ with st.sidebar:
             st.markdown(f'<div class="sidebar-section">Your Squad ({len(fn_list)})</div>', unsafe_allow_html=True)
         to_remove = None
         for i, p in enumerate(fn_list):
-            col_name, col_btn = st.columns([3, 1])
+            col_name, col_btn = st.columns([5, 1])
             _pc = _platform_colors.get(p['platform'], '#a8a8b3')
             _ps = _plat_short.get(p['platform'], p['platform'].upper())
             col_name.markdown(
@@ -301,7 +301,7 @@ with st.sidebar:
             st.markdown(f'<div class="sidebar-section">Your Squad ({len(ow2_list)})</div>', unsafe_allow_html=True)
         to_remove = None
         for i, p in enumerate(ow2_list):
-            col_name, col_btn = st.columns([3, 1])
+            col_name, col_btn = st.columns([5, 1])
             col_name.markdown(f'<div class="player-tag-row"><span class="player-name">{p["name"]}</span><span class="plat-tag" style="background:#f99e1a;">OW2</span></div>', unsafe_allow_html=True)
             if col_btn.button("✕", key=f"ow2_rm_{i}"):
                 to_remove = i
