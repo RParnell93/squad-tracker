@@ -798,7 +798,7 @@ if active_game == "Fortnite":
 
                 # Use weekly trend data (already loaded)
                 if "db_trends" not in st.session_state:
-                    _td = fetch_weekly_trends([p["name"] for p in fn_players])
+                    _td = fetch_weekly_trends([p["name"] for p in fn_players], num_weeks=52)
                     st.session_state.db_trends = _td if _td else {}
 
                 trends = st.session_state.db_trends
@@ -852,7 +852,7 @@ if active_game == "Fortnite":
                     hoverlabel=dict(font_size=14, font_family="JetBrains Mono, monospace"),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=10)),
                     margin=dict(t=60, b=40),
-                    xaxis=dict(tickformat="%b %d"), dragmode=False,
+                    xaxis=dict(tickformat="%b %d", range=["2026-01-01", None]), dragmode=False,
                 )
                 _lock_axes(fig)
                 st.plotly_chart(fig, width="stretch", config=PLOTLY_CONFIG)
