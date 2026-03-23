@@ -37,6 +37,14 @@ PLOTLY_CONFIG = {
     "staticPlot": True,            # nuclear option: disables ALL interaction including zoom/pan/select
 }
 
+# Same as above but with hover enabled (for line charts where seeing values matters)
+PLOTLY_CONFIG_HOVER = {
+    "displayModeBar": False,
+    "scrollZoom": False,
+    "doubleClick": False,
+    "showTips": False,
+}
+
 def _lock_axes(fig):
     """Disable all zoom/pan on a Plotly figure by locking every axis."""
     fig.update_xaxes(fixedrange=True)
@@ -762,7 +770,7 @@ if active_game == "Fortnite":
                     margin=dict(t=60, b=40), dragmode=False,
                 )
                 _lock_axes(fig)
-                st.plotly_chart(fig, width="stretch", config=PLOTLY_CONFIG)
+                st.plotly_chart(fig, width="stretch", config=PLOTLY_CONFIG_HOVER)
 
             render_trend()
 
@@ -855,7 +863,7 @@ if active_game == "Fortnite":
                     xaxis=dict(tickformat="%b %d", autorange=False, range=[date(2026, 1, 1), date.today()]), dragmode=False,
                 )
                 _lock_axes(fig)
-                st.plotly_chart(fig, width="stretch", config=PLOTLY_CONFIG)
+                st.plotly_chart(fig, width="stretch", config=PLOTLY_CONFIG_HOVER)
 
             # Charts
             st.markdown("---")
