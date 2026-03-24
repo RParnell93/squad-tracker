@@ -345,13 +345,20 @@ if active_game == "Fortnite":
     if not fn_players:
         st.info("Add Fortnite players in the sidebar.")
     else:
-        # Load all stats from MotherDuck (populated by daily snapshot)
+        # Show skeleton loading screen on cold start, then load data
         if "db_player_cache" not in st.session_state:
-            _skel = st.empty()
-            _skel.html(skeleton_cards_html(min(len(fn_players), 4)))
+            st.markdown("## Battle Cards")
+            st.html(skeleton_cards_html(min(len(fn_players), 4)))
+            st.markdown("---")
+            st.markdown("## Squad Comparison")
+            st.html(skeleton_chart_html(350))
+            st.markdown("---")
+            st.markdown("## Game Mode Breakdown")
+            st.html(skeleton_table_html(len(fn_players)))
+            # Fetch data, store in session, rerun to render real content
             _pc = fetch_player_cache([p["name"] for p in fn_players])
             st.session_state.db_player_cache = _pc if _pc else {}
-            _skel.empty()
+            st.rerun()
 
         db_cache = st.session_state.db_player_cache
         all_fn = {}
@@ -708,11 +715,10 @@ if active_game == "Fortnite":
 
                 # Load from MotherDuck - fetch enough weeks for YTD + 3 seed weeks for rolling avg
                 if "db_trends" not in st.session_state:
-                    _tskel = st.empty()
-                    _tskel.html(skeleton_chart_html(350))
+                    st.html(skeleton_chart_html(350))
                     db_data = fetch_weekly_trends(list(all_fn.keys()), num_weeks=52)
                     st.session_state.db_trends = db_data
-                    _tskel.empty()
+                    st.rerun()
 
                 db_data = st.session_state.get("db_trends")
                 if not db_data:
@@ -1176,11 +1182,11 @@ elif active_game == "Overwatch 2":
     else:
         # Load OW2 stats from MotherDuck (populated by daily snapshot)
         if "db_ow2_cache" not in st.session_state:
-            _oskel = st.empty()
-            _oskel.html(skeleton_cards_html(min(len(ow2_players), 4)))
+            st.markdown("## Battle Cards")
+            st.html(skeleton_cards_html(min(len(ow2_players), 4)))
             _ow2c = fetch_ow2_cache([p["name"] for p in ow2_players])
             st.session_state.db_ow2_cache = _ow2c if _ow2c else {}
-            _oskel.empty()
+            st.rerun()
 
         db_ow2 = st.session_state.db_ow2_cache
         all_ow2 = {}
