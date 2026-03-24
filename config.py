@@ -177,29 +177,38 @@ CSS = """
 SKELETON_CSS = """
 <style>
     @keyframes skeleton-pulse {
-        0%, 100% { opacity: 0.4; }
-        50% { opacity: 0.15; }
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
     }
-    .skeleton-scroll { display: flex; gap: 16px; overflow-x: auto; padding: 8px 0 16px 0; }
+    .skeleton-scroll {
+        display: flex; gap: 16px; overflow-x: auto; padding: 8px 0 16px 0;
+        scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
+    }
     .skeleton-card {
-        min-width: 280px; max-width: 340px; flex: 1 0 280px;
+        min-width: 280px; max-width: 340px; flex: 1 0 280px; scroll-snap-align: start;
         background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
         border-radius: 16px; padding: 20px; border: 2px solid #2a2a4a;
     }
     .skeleton-bar {
         background: #2a2a4a; border-radius: 6px;
-        animation: skeleton-pulse 1.8s ease-in-out infinite;
+        animation: skeleton-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     }
     .skeleton-circle {
         border-radius: 50%; background: #2a2a4a;
-        animation: skeleton-pulse 1.8s ease-in-out infinite;
+        animation: skeleton-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
     }
     @media (max-width: 480px) {
         .skeleton-scroll { gap: 10px; }
-        .skeleton-card { min-width: 85vw; max-width: 92vw; flex: 0 0 85vw; }
+        .skeleton-card { min-width: 85vw; max-width: 92vw; flex: 0 0 85vw; padding: 14px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .skeleton-bar, .skeleton-circle { animation: none; opacity: 0.7; }
     }
 </style>
 """
+
+# Stat row widths matching real battle card layout (13 rows + percentile section)
+_CARD_STAT_ROWS = [100, 90, 95, 85, 100, 80, 92, 88, 95, 82, 90, 100, 85]
 
 
 def skeleton_cards_html(n=3):
@@ -207,6 +216,20 @@ def skeleton_cards_html(n=3):
     cards = []
     for i in range(n):
         delay = f"animation-delay: {i * 0.15}s;"
+        # Stat rows matching real card's 13 rows
+        stat_rows = "".join(
+            f'<div class="skeleton-bar" style="width:{w}%;height:14px;margin-bottom:8px;{delay}"></div>'
+            for w in _CARD_STAT_ROWS
+        )
+        # Percentile bars section (4 mini bars)
+        pct_bars = "".join(
+            f'''<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">
+                <div class="skeleton-bar" style="width:38px;height:10px;flex-shrink:0;{delay}"></div>
+                <div class="skeleton-bar" style="flex:1;height:12px;{delay}"></div>
+                <div class="skeleton-bar" style="width:22px;height:10px;flex-shrink:0;{delay}"></div>
+            </div>'''
+            for _ in range(4)
+        )
         cards.append(f'''
         <div class="skeleton-card">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
@@ -232,15 +255,18 @@ def skeleton_cards_html(n=3):
                     <div class="skeleton-bar" style="width:50px;height:10px;margin:0 auto;{delay}"></div>
                 </div>
             </div>
-            {"".join(f'<div class="skeleton-bar" style="width:{w}%;height:14px;margin-bottom:8px;{delay}"></div>' for w in [100, 90, 95, 85, 100, 80, 92])}
+            {stat_rows}
+            <div class="skeleton-bar" style="width:45%;height:12px;margin:12px 0 8px;{delay}"></div>
+            {pct_bars}
         </div>''')
-    return SKELETON_CSS + '<div class="skeleton-scroll">' + ''.join(cards) + '</div>'
+    return SKELETON_CSS + f'<div class="skeleton-scroll" role="status" aria-busy="true" aria-label="Loading player stats">' + ''.join(cards) + '</div>'
 
 
 def skeleton_chart_html(height=350):
     """Skeleton placeholder for a chart area."""
     return SKELETON_CSS + f'''
-    <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:12px;padding:16px;border:1px solid #2a2a4a;">
+    <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:12px;padding:16px;border:1px solid #2a2a4a;"
+         role="status" aria-busy="true" aria-label="Loading chart">
         <div class="skeleton-bar" style="width:40%;height:16px;margin-bottom:16px;"></div>
         <div class="skeleton-bar" style="width:100%;height:{height - 60}px;border-radius:8px;"></div>
     </div>'''
@@ -256,6 +282,7 @@ def skeleton_table_html(rows=6):
         '</div>' for r in range(rows)
     )
     return SKELETON_CSS + f'''
-    <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:12px;padding:16px;border:1px solid #2a2a4a;">
+    <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:12px;padding:16px;border:1px solid #2a2a4a;"
+         role="status" aria-busy="true" aria-label="Loading data">
         {header}{row_html}
     </div>'''
