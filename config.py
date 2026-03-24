@@ -172,3 +172,90 @@ CSS = """
     }
 </style>
 """
+
+# Skeleton loading CSS + HTML (shadcn-inspired pulse animation)
+SKELETON_CSS = """
+<style>
+    @keyframes skeleton-pulse {
+        0%, 100% { opacity: 0.4; }
+        50% { opacity: 0.15; }
+    }
+    .skeleton-scroll { display: flex; gap: 16px; overflow-x: auto; padding: 8px 0 16px 0; }
+    .skeleton-card {
+        min-width: 280px; max-width: 340px; flex: 1 0 280px;
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        border-radius: 16px; padding: 20px; border: 2px solid #2a2a4a;
+    }
+    .skeleton-bar {
+        background: #2a2a4a; border-radius: 6px;
+        animation: skeleton-pulse 1.8s ease-in-out infinite;
+    }
+    .skeleton-circle {
+        border-radius: 50%; background: #2a2a4a;
+        animation: skeleton-pulse 1.8s ease-in-out infinite;
+    }
+    @media (max-width: 480px) {
+        .skeleton-scroll { gap: 10px; }
+        .skeleton-card { min-width: 85vw; max-width: 92vw; flex: 0 0 85vw; }
+    }
+</style>
+"""
+
+
+def skeleton_cards_html(n=3):
+    """Generate n skeleton placeholder cards matching battle card layout."""
+    cards = []
+    for i in range(n):
+        delay = f"animation-delay: {i * 0.15}s;"
+        cards.append(f'''
+        <div class="skeleton-card">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+                <div class="skeleton-bar" style="width:55%;height:18px;{delay}"></div>
+                <div class="skeleton-bar" style="width:50px;height:20px;border-radius:4px;{delay}"></div>
+            </div>
+            <div class="skeleton-bar" style="width:35%;height:12px;margin-bottom:16px;{delay}"></div>
+            <div style="display:flex;justify-content:center;gap:20px;margin-bottom:16px;">
+                <div class="skeleton-circle" style="width:68px;height:68px;{delay}"></div>
+                <div class="skeleton-circle" style="width:68px;height:68px;{delay}"></div>
+            </div>
+            <div style="display:flex;justify-content:space-around;margin-bottom:16px;">
+                <div style="text-align:center;">
+                    <div class="skeleton-bar" style="width:48px;height:22px;margin:0 auto 4px;{delay}"></div>
+                    <div class="skeleton-bar" style="width:32px;height:10px;margin:0 auto;{delay}"></div>
+                </div>
+                <div style="text-align:center;">
+                    <div class="skeleton-bar" style="width:36px;height:22px;margin:0 auto 4px;{delay}"></div>
+                    <div class="skeleton-bar" style="width:32px;height:10px;margin:0 auto;{delay}"></div>
+                </div>
+                <div style="text-align:center;">
+                    <div class="skeleton-bar" style="width:48px;height:22px;margin:0 auto 4px;{delay}"></div>
+                    <div class="skeleton-bar" style="width:50px;height:10px;margin:0 auto;{delay}"></div>
+                </div>
+            </div>
+            {"".join(f'<div class="skeleton-bar" style="width:{w}%;height:14px;margin-bottom:8px;{delay}"></div>' for w in [100, 90, 95, 85, 100, 80, 92])}
+        </div>''')
+    return SKELETON_CSS + '<div class="skeleton-scroll">' + ''.join(cards) + '</div>'
+
+
+def skeleton_chart_html(height=350):
+    """Skeleton placeholder for a chart area."""
+    return SKELETON_CSS + f'''
+    <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:12px;padding:16px;border:1px solid #2a2a4a;">
+        <div class="skeleton-bar" style="width:40%;height:16px;margin-bottom:16px;"></div>
+        <div class="skeleton-bar" style="width:100%;height:{height - 60}px;border-radius:8px;"></div>
+    </div>'''
+
+
+def skeleton_table_html(rows=6):
+    """Skeleton placeholder for a data table."""
+    header = '<div style="display:flex;gap:12px;margin-bottom:12px;">' + \
+        ''.join(f'<div class="skeleton-bar" style="flex:1;height:14px;"></div>' for _ in range(6)) + '</div>'
+    row_html = ''.join(
+        '<div style="display:flex;gap:12px;margin-bottom:10px;">' +
+        ''.join(f'<div class="skeleton-bar" style="flex:1;height:12px;animation-delay:{r*0.1}s;"></div>' for _ in range(6)) +
+        '</div>' for r in range(rows)
+    )
+    return SKELETON_CSS + f'''
+    <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:12px;padding:16px;border:1px solid #2a2a4a;">
+        {header}{row_html}
+    </div>'''

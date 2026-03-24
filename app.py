@@ -15,7 +15,7 @@ from epic_auth import (
     stats_for_window, fetch_stats_epic, parse_raw_stats,
 )
 
-from config import DEFAULT_FORTNITE_PLAYERS, DEFAULT_OW2_PLAYERS, CSS, card_css
+from config import DEFAULT_FORTNITE_PLAYERS, DEFAULT_OW2_PLAYERS, CSS, card_css, skeleton_cards_html, skeleton_chart_html, skeleton_table_html
 from api import (
     fetch_fortnite_stats, epic_parsed_to_mode_stats, fetch_epic_account_ids,
     search_ow2_player, fetch_ow2_stats,
@@ -347,9 +347,11 @@ if active_game == "Fortnite":
     else:
         # Load all stats from MotherDuck (populated by daily snapshot)
         if "db_player_cache" not in st.session_state:
-            with st.spinner("Loading stats..."):
-                _pc = fetch_player_cache([p["name"] for p in fn_players])
-                st.session_state.db_player_cache = _pc if _pc else {}
+            _skel = st.empty()
+            _skel.html(skeleton_cards_html(min(len(fn_players), 4)))
+            _pc = fetch_player_cache([p["name"] for p in fn_players])
+            st.session_state.db_player_cache = _pc if _pc else {}
+            _skel.empty()
 
         db_cache = st.session_state.db_player_cache
         all_fn = {}
@@ -706,9 +708,11 @@ if active_game == "Fortnite":
 
                 # Load from MotherDuck - fetch enough weeks for YTD + 3 seed weeks for rolling avg
                 if "db_trends" not in st.session_state:
-                    with st.spinner("Loading trend data..."):
-                        db_data = fetch_weekly_trends(list(all_fn.keys()), num_weeks=52)
-                        st.session_state.db_trends = db_data
+                    _tskel = st.empty()
+                    _tskel.html(skeleton_chart_html(350))
+                    db_data = fetch_weekly_trends(list(all_fn.keys()), num_weeks=52)
+                    st.session_state.db_trends = db_data
+                    _tskel.empty()
 
                 db_data = st.session_state.get("db_trends")
                 if not db_data:
@@ -1172,9 +1176,11 @@ elif active_game == "Overwatch 2":
     else:
         # Load OW2 stats from MotherDuck (populated by daily snapshot)
         if "db_ow2_cache" not in st.session_state:
-            with st.spinner("Loading stats..."):
-                _ow2c = fetch_ow2_cache([p["name"] for p in ow2_players])
-                st.session_state.db_ow2_cache = _ow2c if _ow2c else {}
+            _oskel = st.empty()
+            _oskel.html(skeleton_cards_html(min(len(ow2_players), 4)))
+            _ow2c = fetch_ow2_cache([p["name"] for p in ow2_players])
+            st.session_state.db_ow2_cache = _ow2c if _ow2c else {}
+            _oskel.empty()
 
         db_ow2 = st.session_state.db_ow2_cache
         all_ow2 = {}
