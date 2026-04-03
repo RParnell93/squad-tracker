@@ -570,20 +570,8 @@ if active_game == "Fortnite":
             best_kills = max((player_mode(n).get("kills", 0) or 0 for n in active_names), default=0)
             best_kpm = max((player_mode(n).get("killsPerMatch", 0) or 0 for n in active_names), default=0)
 
-            # Supreme Leader - best composite score, must have played in the last 7 days
-            fn_composite = {}
-            for n in names:
-                s7_score = perf_scores.get(n, (None, None))[0]
-                if s7_score is None:
-                    continue  # no 7-day activity = not eligible
-                o = player_mode(n)
-                if o and o.get("matches", 0):
-                    fn_composite[n] = (
-                        0.4 * value_to_percentile(o.get("kd", 0) or 0, SCORE_CURVES["kd"])
-                        + 0.3 * value_to_percentile(o.get("winRate", 0) or 0, SCORE_CURVES["winRate"])
-                        + 0.3 * value_to_percentile(o.get("killsPerMatch", 0) or 0, SCORE_CURVES["killsPerMatch"])
-                    )
-            fn_supreme = max(fn_composite, key=fn_composite.get) if fn_composite and max(fn_composite.values()) > 0 else None
+            # Supreme Leader - highest 7-day Dub Score
+            fn_supreme = max(active_names, key=lambda n: perf_scores.get(n, (0, 0))[0] or 0) if active_names else None
 
             # Mini percentile bar for battle cards
             _pct_map = {"K/D": "K/D", "Win%": "Win Rate", "K/M": "Kills/Match", "Out/M": "Outlived/Match"}
