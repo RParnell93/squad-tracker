@@ -20,7 +20,7 @@ jobs:
 
       - name: Run daily refresh (lifetime + 7d + 30d + weekly stats)
         env:
-          MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_TOKEN }}
+          MOTHERDUCK_TOKEN: ${{ secrets.MOTHERDUCK_KEYS }}
           FORTNITE_API_KEY: ${{ secrets.FORTNITE_API_KEY }}
           EPIC_CLIENT_ID: ${{ secrets.EPIC_CLIENT_ID }}
           EPIC_CLIENT_SECRET: ${{ secrets.EPIC_CLIENT_SECRET }}
