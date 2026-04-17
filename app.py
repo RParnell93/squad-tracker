@@ -543,8 +543,7 @@ if active_game == "Fortnite":
                                     st.session_state.epic_cache[cache_key] = None
                                 time.sleep(0.3)
 
-            names = list(all_fn.keys())
-            display_names = [all_fn[n]["account"]["name"] for n in names]
+            all_names = list(all_fn.keys())
 
             # Get the right stats dict for each player
             def player_mode(name, mode="overall"):
@@ -554,6 +553,14 @@ if active_game == "Fortnite":
                 if mode == "overall":
                     return stats["all"].get("overall", {}) or {}
                 return stats["all"].get(mode, {}) or {}
+
+            # Filter out players with no data for the selected time window
+            names = [n for n in all_names if player_mode(n).get("matches", 0)]
+            display_names = [all_fn[n]["account"]["name"] for n in names]
+
+            if not names:
+                st.info("No players have stats for this time window.")
+                st.stop()
 
             # Dub Scores from DB-cached 7d/30d stats
             perf_scores = {}
@@ -571,7 +578,15 @@ if active_game == "Fortnite":
             best_kpm = max((player_mode(n).get("killsPerMatch", 0) or 0 for n in active_names), default=0)
 
             # Supreme Leader - highest 7-day Dub Score
-            fn_supreme = max(active_names, key=lambda n: perf_scores.get(n, (0, 0))[0] or 0) if active_names else None
+            fn_supreme = None
+            _best_s7 = 0
+            for n in names:
+                s7_score = perf_scores.get(n, (None, None))[0]
+                if s7_score is not None and s7_score > _best_s7:
+                    _best_s7 = s7_score
+                    fn_supreme = n
+            if len(names) <= 1:
+                fn_supreme = None
 
             # Mini percentile bar for battle cards
             _pct_map = {"K/D": "K/D", "Win%": "Win Rate", "K/M": "Kills/Match", "Out/M": "Outlived/Match"}
@@ -594,7 +609,7 @@ if active_game == "Fortnite":
 
             # Battle Cards - Supreme Leader first
             st.markdown("## Battle Cards")
-            fn_card_order = sorted(all_fn.keys(), key=lambda n: perf_scores.get(n, (0, 0))[0] or 0, reverse=True)
+            fn_card_order = sorted(names, key=lambda n: perf_scores.get(n, (0, 0))[0] or 0, reverse=True)
             if fn_supreme and fn_supreme in fn_card_order:
                 fn_card_order.remove(fn_supreme)
                 fn_card_order.insert(0, fn_supreme)
@@ -704,7 +719,7 @@ if active_game == "Fortnite":
                 # Load from MotherDuck - fetch enough weeks for YTD + 3 seed weeks for rolling avg
                 if "db_trends" not in st.session_state:
                     st.html(skeleton_chart_html(350))
-                    db_data = fetch_weekly_trends(list(all_fn.keys()), num_weeks=52)
+                    db_data = fetch_weekly_trends(all_names, num_weeks=52)
                     st.session_state.db_trends = db_data
                     st.rerun()
 
@@ -1206,6 +1221,11 @@ elif active_game == "Overwatch 2":
                 if data:
                     all_ow2[name] = data
                     st.session_state.ow2_cache[name] = data
+
+        # Filter out players with no games played
+        if all_ow2:
+            all_ow2 = {n: d for n, d in all_ow2.items()
+                       if (d.get("stats", {}).get("general", {}).get("games_played", 0) or 0) > 0}
 
         if not all_ow2:
             st.info("No OW2 stats available yet. Stats refresh daily at 7am ET, or players may have private profiles.")
