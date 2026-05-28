@@ -2,7 +2,7 @@ name: Keep Streamlit Alive
 
 on:
   schedule:
-    - cron: '0 12 * * *'  # Daily at noon UTC
+    - cron: '0 */6 * * *'  # Every 6 hours, before Streamlit's 12-hour hibernation window
   workflow_dispatch:
 
 jobs:
@@ -10,4 +10,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping Streamlit app
-        run: curl -s -o /dev/null -w "%{http_code}" https://squadstats.streamlit.app
+        run: |
+          status=$(curl -sS --max-time 60 \
+            --user-agent "Mozilla/5.0 (GitHub Actions keep-alive)" \
+            -o /tmp/squadstats.html \
+            -w "%{http_code}" \
+            https://squadstats.streamlit.app/)
+          echo "HTTP status: ${status}"
+          if grep -qi "This app has gone to sleep" /tmp/squadstats.html; then
+            echo "Streamlit reported the app is asleep. Wake it manually once, then this scheduled job should keep it warm."
+            exit 1
+          fi
